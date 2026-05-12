@@ -6,7 +6,7 @@ import 'leaflet/dist/leaflet.css'
 const mapElement = ref(null)
 let mapInstance = null
 
-// Transformamos o Mock em um estado reativo do Vue
+// Estado reativo com os nossos dados fictícios
 const riskAreas = ref([
   { id: 1, name: 'Marco Zero', lat: -8.0631, lng: -34.8711, level: 'green', desc: 'Vias liberadas. Sem acúmulo de água.' },
   { id: 2, name: 'Viaduto da Caxangá', lat: -8.0434, lng: -34.9332, level: 'yellow', desc: 'Atenção: Fluxo lento, risco moderado.' },
@@ -14,7 +14,6 @@ const riskAreas = ref([
   { id: 4, name: 'Dois Irmãos / Macaxeira', lat: -8.0142, lng: -34.9458, level: 'red', desc: 'Risco Extremo: Via interditada. Risco de deslizamento.' }
 ])
 
-// Filtramos apenas os alertas críticos para mostrar na lista lateral
 const criticalAlerts = computed(() => {
   return riskAreas.value.filter(area => area.level === 'red' || area.level === 'orange')
 })
@@ -26,12 +25,9 @@ const alertColors = {
   red: '#ef4444'
 }
 
-// Função para recentralizar o mapa
 const resetView = () => {
   if (mapInstance) {
-    mapInstance.flyTo([-8.05, -34.9], 12, {
-      duration: 1.5 // Faz uma animação suave de voo
-    })
+    mapInstance.flyTo([-8.05, -34.9], 12, { duration: 1.5 })
   }
 }
 
@@ -45,29 +41,38 @@ onMounted(() => {
     attribution: '© OpenStreetMap - SkyRadar'
   }).addTo(mapInstance)
 
-  // Movemos o controle de zoom para o canto inferior direito para não bater no nosso painel
   L.control.zoom({ position: 'bottomright' }).addTo(mapInstance)
 
-  // Renderizar os marcadores baseados na nossa variável reativa
+  // Renderizar os pinos customizados
   riskAreas.value.forEach(area => {
-    L.circleMarker([area.lat, area.lng], {
-      radius: window.innerWidth < 768 ? 8 : 12, // Um pouco maior no desktop
-      fillColor: alertColors[area.level],
-      color: '#ffffff',
-      weight: 2,
-      opacity: 1,
-      fillOpacity: 0.9
+    
+    const pinIcon = L.divIcon({
+      className: 'custom-pin', // Classe CSS para tirar a borda padrão do Leaflet
+      html: `
+        <div class="relative flex items-center justify-center w-8 h-8 drop-shadow-xl">
+          <svg viewBox="0 0 24 24" fill="${alertColors[area.level]}" stroke="white" stroke-width="2" class="w-full h-full">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
+            <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
+          </svg>
+          ${area.level === 'red' || area.level === 'orange' ? '<span class="absolute top-[25%] w-2.5 h-2.5 bg-white rounded-full animate-ping opacity-75"></span>' : ''}
+        </div>
+      `,
+      iconSize: [32, 32],
+      iconAnchor: [16, 32], 
+      popupAnchor: [0, -32] 
     })
-    .addTo(mapInstance)
-    .bindPopup(`
-      <div style="font-family: sans-serif;">
-        <strong style="color: ${alertColors[area.level]}; text-transform: uppercase; font-size: 10px;">
-          Nível: ${area.level}
-        </strong><br>
-        <b>${area.name}</b><br>
-        <span style="font-size: 12px; color: #555;">${area.desc}</span>
-      </div>
-    `)
+
+    L.marker([area.lat, area.lng], { icon: pinIcon })
+      .addTo(mapInstance)
+      .bindPopup(`
+        <div style="font-family: sans-serif;">
+          <strong style="color: ${alertColors[area.level]}; text-transform: uppercase; font-size: 10px;">
+            Nível: ${area.level}
+          </strong><br>
+          <b>${area.name}</b><br>
+          <span style="font-size: 12px; color: #555;">${area.desc}</span>
+        </div>
+      `)
   })
 })
 
@@ -105,7 +110,7 @@ onUnmounted(() => {
       <!-- Divisória -->
       <hr class="border-slate-700 mb-4 shrink-0">
 
-      <!-- Feed de Alertas Críticos (Rolável) -->
+      <!-- Feed de Alertas Críticos -->
       <div class="flex-1 overflow-y-auto pr-1 space-y-3 custom-scrollbar">
         <h2 class="text-xs text-slate-400 uppercase tracking-widest font-semibold sticky top-0 bg-slate-900/90 py-1">
           Ocorrências Críticas
@@ -144,5 +149,11 @@ onUnmounted(() => {
 .custom-scrollbar::-webkit-scrollbar-thumb {
   background: rgba(71, 85, 105, 0.8); 
   border-radius: 4px;
+}
+
+/* O Segredo: Remove a borda e fundo branco padrão que o Leaflet joga nos ícones customizados */
+.custom-pin {
+  background: transparent !important;
+  border: none !important;
 }
 </style>
