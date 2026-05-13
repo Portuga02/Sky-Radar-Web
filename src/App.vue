@@ -5,9 +5,8 @@ import 'leaflet/dist/leaflet.css'
 
 const mapElement = ref(null)
 let mapInstance = null
-let userMarker = null // Variável para guardar o pino azul do usuário
+let userMarker = null
 
-// Estado reativo com os nossos dados fictícios
 const riskAreas = ref([
   { id: 1, name: 'Marco Zero', lat: -8.0631, lng: -34.8711, level: 'green', desc: 'Vias liberadas. Sem acúmulo de água.' },
   { id: 2, name: 'Viaduto da Caxangá', lat: -8.0434, lng: -34.9332, level: 'yellow', desc: 'Atenção: Fluxo lento, risco moderado.' },
@@ -26,35 +25,29 @@ const alertColors = {
   red: '#ef4444'
 }
 
-// Retorna a visão para a região central de Recife
 const resetView = () => {
   if (mapInstance) {
     mapInstance.flyTo([-8.05, -34.9], 12, { duration: 1.5 })
   }
 }
 
-// NOVO: Função de Geolocalização (Busca o GPS do navegador)
 const locateUser = () => {
   if (!navigator.geolocation) {
     alert("Seu navegador não suporta geolocalização.")
     return
   }
 
-  // Pede a localização
   navigator.geolocation.getCurrentPosition(
     (position) => {
       const lat = position.coords.latitude
       const lng = position.coords.longitude
 
-      // Voa para a posição do usuário com bastante zoom (15)
       mapInstance.flyTo([lat, lng], 15, { duration: 1.5 })
 
-      // Se já existir um marcador do usuário, remove antes de criar outro
       if (userMarker) {
         mapInstance.removeLayer(userMarker)
       }
 
-      // Cria o ícone azul pulsante para o GPS do usuário
       const userPinIcon = L.divIcon({
         className: 'custom-pin',
         html: `
@@ -67,7 +60,6 @@ const locateUser = () => {
         iconAnchor: [12, 12]
       })
 
-      // Adiciona o pino no mapa
       userMarker = L.marker([lat, lng], { icon: userPinIcon }).addTo(mapInstance)
         .bindPopup('<div style="font-family: sans-serif; font-size: 12px; font-weight: bold; color: #3b82f6;">Você está aqui</div>')
         .openPopup()
@@ -89,12 +81,12 @@ onMounted(() => {
     attribution: '© OpenStreetMap - SkyRadar'
   }).addTo(mapInstance)
 
-  L.control.zoom({ position: 'bottomright' }).addTo(mapInstance)
+  // Zoom no mobile pode ficar coberto, então escondemos em telas muito pequenas via CSS do leaflet depois, mas deixamos no topright como padrão seguro
+  L.control.zoom({ position: 'topright' }).addTo(mapInstance)
 
-  // Renderiza os pinos de risco
   riskAreas.value.forEach(area => {
     const pinIcon = L.divIcon({
-      className: 'custom-pin', 
+      className: 'custom-pin',
       html: `
         <div class="relative flex items-center justify-center w-8 h-8 drop-shadow-xl">
           <svg viewBox="0 0 24 24" fill="${alertColors[area.level]}" stroke="white" stroke-width="2" class="w-full h-full">
@@ -105,8 +97,8 @@ onMounted(() => {
         </div>
       `,
       iconSize: [32, 32],
-      iconAnchor: [16, 32], 
-      popupAnchor: [0, -32] 
+      iconAnchor: [16, 32],
+      popupAnchor: [0, -32]
     })
 
     L.marker([area.lat, area.lng], { icon: pinIcon })
@@ -130,37 +122,53 @@ onUnmounted(() => {
 
 <template>
   <div style="position: relative; width: 100vw; height: 100vh; overflow: hidden; background: #0f172a;">
-    
+
     <div ref="mapElement" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 0;"></div>
 
-    <!-- Painel de Controle Principal -->
-    <div class="absolute top-4 right-4 z-[1000] w-80 bg-slate-900/90 backdrop-blur-md text-white p-5 rounded-xl shadow-2xl border border-slate-700 flex flex-col max-h-[90vh]">
-      
+    <!-- 
+      Painel de Controle Responsivo 
+      Mobile: Fica no rodapé (bottom-0), ocupa a largura toda (w-full), tem borda arredondada só em cima (rounded-t-3xl)
+      Desktop (md:): Volta a ser um painel flutuante no canto superior direito
+    -->
+    <div
+      class="absolute bottom-0 left-0 w-full rounded-t-3xl md:bottom-auto md:left-auto md:top-4 md:right-4 z-[1000] md:w-80 bg-slate-900/95 backdrop-blur-md text-white p-5 md:rounded-xl shadow-[0_-10px_40px_rgba(0,0,0,0.3)] md:shadow-2xl border-t border-slate-700 md:border flex flex-col max-h-[45vh] md:max-h-[90vh] transition-all duration-300">
+
+      <!-- Linha indicadora de arraste (Visual para Mobile) -->
+      <div class="w-12 h-1.5 bg-slate-600 rounded-full mx-auto mb-4 md:hidden shrink-0"></div>
+
       <div class="flex items-center justify-between mb-4 shrink-0">
         <h1 class="text-xl font-bold tracking-wider">🛰️ SkyRadar</h1>
         <span class="animate-pulse flex h-3 w-3 rounded-full bg-red-500"></span>
       </div>
 
-      <p class="text-xs text-slate-400 mb-4 uppercase tracking-widest font-semibold shrink-0">
+      <p class="hidden md:block text-xs text-slate-400 mb-4 uppercase tracking-widest font-semibold shrink-0">
         Monitoramento Recife
       </p>
 
-      <div class="flex gap-2 mb-6 shrink-0 text-[10px] uppercase font-bold text-slate-400">
-        <div class="flex items-center gap-1"><div class="w-2 h-2 rounded-full bg-green-500"></div> Normal</div>
-        <div class="flex items-center gap-1"><div class="w-2 h-2 rounded-full bg-yellow-400"></div> Atenção</div>
-        <div class="flex items-center gap-1"><div class="w-2 h-2 rounded-full bg-orange-500"></div> Alerta</div>
-        <div class="flex items-center gap-1"><div class="w-2 h-2 rounded-full bg-red-500"></div> Risco</div>
+      <div class="flex gap-2 md:mb-6 mb-3 shrink-0 text-[10px] uppercase font-bold text-slate-400 flex-wrap">
+        <div class="flex items-center gap-1">
+          <div class="w-2 h-2 rounded-full bg-green-500"></div> Normal
+        </div>
+        <div class="flex items-center gap-1">
+          <div class="w-2 h-2 rounded-full bg-yellow-400"></div> Atenção
+        </div>
+        <div class="flex items-center gap-1">
+          <div class="w-2 h-2 rounded-full bg-orange-500"></div> Alerta
+        </div>
+        <div class="flex items-center gap-1">
+          <div class="w-2 h-2 rounded-full bg-red-500"></div> Risco
+        </div>
       </div>
 
-      <hr class="border-slate-700 mb-4 shrink-0">
+      <hr class="border-slate-700 mb-3 md:mb-4 shrink-0">
 
       <div class="flex-1 overflow-y-auto pr-1 space-y-3 custom-scrollbar">
-        <h2 class="text-xs text-slate-400 uppercase tracking-widest font-semibold sticky top-0 bg-slate-900/90 py-1">
+        <h2 class="text-xs text-slate-400 uppercase tracking-widest font-semibold sticky top-0 bg-slate-900/95 py-1">
           Ocorrências Críticas
         </h2>
-        
-        <div v-for="alert in criticalAlerts" :key="alert.id" 
-             class="p-3 rounded-lg border border-slate-700 bg-slate-800/50 hover:bg-slate-800 transition-colors">
+
+        <div v-for="alert in criticalAlerts" :key="alert.id"
+          class="p-3 rounded-lg border border-slate-700 bg-slate-800/50 hover:bg-slate-800 transition-colors">
           <div class="flex items-center gap-2 mb-1">
             <div class="w-2 h-2 rounded-full" :class="alert.level === 'red' ? 'bg-red-500' : 'bg-orange-500'"></div>
             <p class="text-sm font-bold">{{ alert.name }}</p>
@@ -170,19 +178,22 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <!-- Container dos Botões de Ação na base da tela -->
-    <div class="absolute bottom-6 left-1/2 -translate-x-1/2 z-[1000] flex gap-3">
-      
-      <!-- Botão Onde Estou (Geolocalização) -->
-      <button @click="locateUser" 
-              class="bg-blue-600/90 backdrop-blur-md text-white px-5 py-2 rounded-full border border-blue-500 shadow-xl hover:bg-blue-700 transition-all font-semibold text-sm flex items-center gap-2">
-        🎯 Onde Estou?
+    <!-- 
+      Container dos Botões de Ação
+      Mobile: Canto superior esquerdo
+      Desktop (md:): Rodapé centralizado
+    -->
+    <div
+      class="absolute top-4 left-4 md:top-auto md:bottom-6 md:left-1/2 md:-translate-x-1/2 z-[1000] flex flex-col md:flex-row gap-3">
+
+      <button @click="locateUser"
+        class="bg-blue-600/90 backdrop-blur-md text-white px-4 py-2 md:px-5 rounded-full border border-blue-500 shadow-xl hover:bg-blue-700 transition-all font-semibold text-xs md:text-sm flex items-center justify-center gap-2">
+        🎯 <span class="hidden md:inline">Onde Estou?</span>
       </button>
 
-      <!-- Botão Centralizar Visão -->
-      <button @click="resetView" 
-              class="bg-slate-900/90 backdrop-blur-md text-white px-5 py-2 rounded-full border border-slate-700 shadow-xl hover:bg-slate-800 transition-all font-semibold text-sm flex items-center gap-2">
-        📍 Visão Geral
+      <button @click="resetView"
+        class="bg-slate-900/90 backdrop-blur-md text-white px-4 py-2 md:px-5 rounded-full border border-slate-700 shadow-xl hover:bg-slate-800 transition-all font-semibold text-xs md:text-sm flex items-center justify-center gap-2">
+        📍 <span class="hidden md:inline">Visão Geral</span>
       </button>
 
     </div>
@@ -194,12 +205,14 @@ onUnmounted(() => {
 .custom-scrollbar::-webkit-scrollbar {
   width: 4px;
 }
+
 .custom-scrollbar::-webkit-scrollbar-track {
-  background: rgba(30, 41, 59, 0.5); 
+  background: rgba(30, 41, 59, 0.5);
   border-radius: 4px;
 }
+
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(71, 85, 105, 0.8); 
+  background: rgba(71, 85, 105, 0.8);
   border-radius: 4px;
 }
 
