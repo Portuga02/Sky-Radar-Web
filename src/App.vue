@@ -53,8 +53,6 @@ const fetchAlerts = async () => {
     if (response.ok) {
       const dbData = await response.json()
 
-      // 🎯 NORMALIZADOR DE DADOS SÊNIOR
-      // Intercepta os dados do banco e força o nível visual (cor) a obedecer a matemática da chuva
       riskAreas.value = dbData.map(area => {
         let nivelCorrigido = 'green'; // Padrão seguro
         const chuvaDoBanco = parseFloat(area.rain) || 0;
@@ -63,7 +61,6 @@ const fetchAlerts = async () => {
         else if (chuvaDoBanco > 5 && chuvaDoBanco <= 15) nivelCorrigido = 'orange';
         else if (chuvaDoBanco > 15) nivelCorrigido = 'red';
 
-        // Retorna o objeto do alerta corrigindo o 'level' para bater com a cor exata
         return {
           ...area,
           level: nivelCorrigido
