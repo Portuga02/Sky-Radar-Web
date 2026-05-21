@@ -306,7 +306,7 @@ onMounted(async () => {
  mapInstance.on('click', async (e) => {
     fecharCard()
     
-    // 🎯 A MÁGICA: O .wrap() converte longitudes infinitas (ex: -458) 
+
 
     const latLngCorrigido = e.latlng.wrap()
     const lat = latLngCorrigido.lat
