@@ -305,9 +305,6 @@ onMounted(async () => {
 
  mapInstance.on('click', async (e) => {
     fecharCard()
-    
-
-
     const latLngCorrigido = e.latlng.wrap()
     const lat = latLngCorrigido.lat
     const lng = latLngCorrigido.lng
