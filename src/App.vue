@@ -88,18 +88,15 @@ const fecharCard = () => {
 }
 
 const focarNoAlerta = (alert) => {
-  // 1. Abre o card e voa para o local
+
   selectedArea.value = alert;
   if (mapInstance) {
     mapInstance.flyTo([alert.lat, alert.lng], 15, { duration: 1.2 });
   }
-
-  // 2. Verifica se o alerta veio do Histórico Local (varredura)
   const ehVarreduraLocal = localRadarData.value.some(a => a.id === alert.id);
-  
-  // 3. Se for varredura local, o pino antigo foi apagado. Vamos recriar ele agora!
+
   if (ehVarreduraLocal && dynamicMarkersLayer) {
-    dynamicMarkersLayer.clearLayers(); // Limpa a varredura de outro local
+    dynamicMarkersLayer.clearLayers(); 
 
     const corMapeada = alertColors[alert.level] || '#10B981';
     const radarPinIcon = L.divIcon({
