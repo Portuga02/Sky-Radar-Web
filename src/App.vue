@@ -84,9 +84,9 @@ const toggleFilter = (level) => {
 
 const fecharCard = () => {
   selectedArea.value = null
-  // if (dynamicMarkersLayer) dynamicMarkersLayer.clearLayers()
+
 }
-// 🎯 FOCA NO ALERTA E RECUBRA O PINO FANTASMA
+
 const focarNoAlerta = (alert) => {
   // 1. Abre o card e voa para o local
   selectedArea.value = alert;
