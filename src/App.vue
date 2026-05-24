@@ -52,7 +52,7 @@ const fetchAlerts = async () => {
     const response = await fetch('http://localhost:8000/api/alerts')
     if (response.ok) {
       const dbData = await response.json()
-      
+
       // 🎯 NORMALIZADOR DE DADOS SÊNIOR
       // Intercepta os dados do banco e força o nível visual (cor) a obedecer a matemática da chuva
       riskAreas.value = dbData.map(area => {
@@ -64,12 +64,12 @@ const fetchAlerts = async () => {
         else if (chuvaDoBanco > 15) nivelCorrigido = 'red';
 
         // Retorna o objeto do alerta corrigindo o 'level' para bater com a cor exata
-        return { 
-          ...area, 
-          level: nivelCorrigido 
+        return {
+          ...area,
+          level: nivelCorrigido
         }
       })
-      
+
       renderMarkers()
     }
   } catch (error) {
@@ -96,11 +96,11 @@ const focarNoAlerta = (alert) => {
   const ehVarreduraLocal = localRadarData.value.some(a => a.id === alert.id);
 
   if (ehVarreduraLocal && dynamicMarkersLayer) {
-    dynamicMarkersLayer.clearLayers(); 
+    dynamicMarkersLayer.clearLayers();
 
     const corMapeada = alertColors[alert.level] || '#10B981';
     const radarPinIcon = L.divIcon({
-      className: 'marker-custom-radar', 
+      className: 'marker-custom-radar',
       html: `
         <div style="position: relative; width: 42px; height: 42px; display: flex; align-items: center; justify-content: center;">
           <span style="position: absolute; width: 100%; height: 100%; border-radius: 50%; border: 2px dashed ${corMapeada}; opacity: 0.7; animation: spin 6s linear infinite;"></span>
@@ -300,14 +300,14 @@ onMounted(async () => {
   markersLayer = L.layerGroup().addTo(mapInstance)
   dynamicMarkersLayer = L.layerGroup().addTo(mapInstance)
 
- mapInstance.on('click', async (e) => {
+  mapInstance.on('click', async (e) => {
     fecharCard()
     const latLngCorrigido = e.latlng.wrap()
     const lat = latLngCorrigido.lat
     const lng = latLngCorrigido.lng
-    
-    let nomeIdentificado = `Coordenada: ${lat.toFixed(2)}, ${lng.toFixed(2)}` 
-    
+
+    let nomeIdentificado = `Coordenada: ${lat.toFixed(2)}, ${lng.toFixed(2)}`
+
     try {
       const urlReverse = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=pt`
       const res = await fetch(urlReverse);
@@ -315,8 +315,8 @@ onMounted(async () => {
         const data = await res.json()
         nomeIdentificado = data.locality || data.city || data.principalSubdivision || nomeIdentificado;
       }
-    } catch (err) { 
-      console.warn("⚠️ Geocodificação falhou."); 
+    } catch (err) {
+      console.warn("⚠️ Geocodificação falhou.");
     }
 
     await inspecionarCoordenadaExpandida(lat, lng, nomeIdentificado)
@@ -450,8 +450,7 @@ onUnmounted(() => { if (mapInstance) { mapInstance.remove(); mapInstance = null;
       <section class="flex-1 overflow-y-auto pr-1 space-y-3 custom-scrollbar">
         <div v-if="criticalAlerts.length === 0" class="text-center py-4 text-slate-500 text-xs animate-pulse">Aguardando
           varredura...</div>
-       <article v-for="alert in criticalAlerts" :key="alert.id" 
-          @click="focarNoAlerta(alert)"
+        <article v-for="alert in criticalAlerts" :key="alert.id" @click="focarNoAlerta(alert)"
           class="p-4 rounded-xl border border-slate-700 bg-slate-800/50 hover:bg-slate-700 transition-colors cursor-pointer group">
           <div class="flex items-center gap-2 mb-2">
             <div class="w-2 h-2 rounded-full shadow-lg"
@@ -516,8 +515,6 @@ onUnmounted(() => { if (mapInstance) { mapInstance.remove(); mapInstance = null;
     transform: rotate(360deg);
   }
 }
-
-/* Animação responsiva do Card de Detalhes */
 .slide-up-enter-active,
 .slide-up-leave-active {
   transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
