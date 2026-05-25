@@ -7,12 +7,15 @@ const mapElement = ref(null)
 let mapInstance = null
 let userMarker = null
 let markersLayer = null
-let dynamicMarkersLayer = null // Camada para os pinos temporários do radar de raio expandido
+let dynamicMarkersLayer = null
 
 const riskAreas = ref([])
 const activeFilter = ref('all')
 const selectedArea = ref(null)
 
+// 🎯 NOVA VARIÁVEL: Guarda o texto digitado na busca
+const searchQuery = ref('')
+const searchResults = ref([]) // 🎯 NOVA VARIÁVEL: Guarda a lista de cidades achadas
 const criticalAlerts = computed(() => {
   let list = riskAreas.value.filter(area => area.level === 'red' || area.level === 'orange')
   if (activeFilter.value !== 'all') {
@@ -90,13 +93,74 @@ const renderMarkers = () => {
     markersLayer.addLayer(marker)
   })
 }
+// 🎯 MOTOR DE BUSCA: Agora busca até 5 opções e não voa direto!
+const buscarLocal = async () => {
+  if (!searchQuery.value.trim()) return
 
-// 🎯 NOVA FUNÇÃO ATUALIZADA: Varredura de múltiplos pontos em um raio maior
-const inspecionarCoordenadaExpandida = async (lat, lng) => {
+  try {
+    // Mudamos o limit=1 para limit=5 para o satélite trazer várias cidades com o mesmo nome
+    const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=5&email=contato@skyradar.com.br&q=${encodeURIComponent(searchQuery.value)}`;
+    
+    const response = await fetch(url, {
+      headers: { 'Accept-Language': 'pt-BR,pt;q=0.9' }
+    });
+
+    if (!response.ok) {
+      alert('🛰️ O satélite de mapeamento está sobrecarregado. Tente novamente em segundos.');
+      return;
+    }
+
+    const data = await response.json();
+
+    if (data && data.length > 0) {
+      // Em vez de voar pro mapa, a gente enche a lista de resultados
+      searchResults.value = data; 
+    } else {
+      searchResults.value = [];
+      alert('Local não encontrado. Tente digitar o nome da cidade junto com o estado.');
+    }
+  } catch (error) {
+    console.error("Erro na busca de local:", error)
+  }
+}
+
+// 🎯 NOVA FUNÇÃO: O que acontece quando você clica em uma das opções da lista
+const selecionarLocal = async (local) => {
+  searchResults.value = []; // Fecha o menu dropdown
+  searchQuery.value = '';   // Limpa a barra
+  fecharCard();
+  
+  const lat = parseFloat(local.lat);
+  const lng = parseFloat(local.lon);
+  const addr = local.address;
+
+  let nomeFormatado = 'Área Inspecionada';
+  if (addr) {
+    const estado = addr.state || '';
+    const cidade = addr.city || addr.town || addr.village || addr.municipality || '';
+    const bairro = addr.suburb || addr.neighbourhood || addr.city_district || '';
+
+    if (bairro && cidade && estado) {
+      nomeFormatado = `Bairro: ${bairro} - ${cidade} - ${estado}`;
+    } else if (cidade && estado) {
+      nomeFormatado = `${cidade} - ${estado}`;
+    } else {
+      nomeFormatado = local.display_name.split(',').slice(0, 3).join(', ');
+    }
+  }
+
+  if (mapInstance) {
+    mapInstance.flyTo([lat, lng], 13, { duration: 1.5 });
+  }
+
+  await inspecionarCoordenadaExpandida(lat, lng, nomeFormatado);
+}
+
+// 🎯 RADAR ESTENDIDO: Agora recebe o nome customizado do local central
+const inspecionarCoordenadaExpandida = async (lat, lng, nomeCentral = 'Área Inspecionada') => {
   try {
     if (dynamicMarkersLayer) dynamicMarkersLayer.clearLayers()
 
-    // Configuramos uma matriz de 5 pontos (Centro + 4 pontos cardeais ao redor)
     const malhaRadar = [
       { name: 'Ponto Central', dLat: 0, dLng: 0 },
       { name: 'Vetor Norte', dLat: 0.012, dLng: 0 },
@@ -108,7 +172,6 @@ const inspecionarCoordenadaExpandida = async (lat, lng) => {
     const lats = malhaRadar.map(p => lat + p.dLat).join(',')
     const lngs = malhaRadar.map(p => lng + p.dLng).join(',')
 
-    // Chamada em lote otimizada para o satélite
     const response = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lats}&longitude=${lngs}&current=precipitation,temperature_2m`)
     const dataList = await response.json()
 
@@ -123,22 +186,23 @@ const inspecionarCoordenadaExpandida = async (lat, lng) => {
       const temp = data.current.temperature_2m || '--'
 
       let nivel = 'green'
-      let desc = `${config.name} analisado via varredura de raio. Condições normais.`
+      let desc = `${config.name === 'Ponto Central' ? nomeCentral : config.name} analisado via varredura. Condições normais.`
 
       if (chuva > 0 && chuva <= 5) {
         nivel = 'yellow'
-        desc = `Atenção no ${config.name}: Chuva leve (${chuva}mm) detectada.`
+        desc = `Atenção no quadrante: Chuva leve (${chuva}mm) detectada.`
       } else if (chuva > 5 && chuva <= 15) {
         nivel = 'orange'
-        desc = `Alerta no ${config.name}: Chuva moderada (${chuva}mm) com possível acúmulo.`
+        desc = `Alerta no quadrante: Chuva moderada (${chuva}mm) com possível acúmulo.`
       } else if (chuva > 15) {
         nivel = 'red'
-        desc = `Risco Crítico no ${config.name}: Chuva forte (${chuva}mm) detectada por satélite.`
+        desc = `Risco Crítico no quadrante: Chuva forte (${chuva}mm) detectada por satélite.`
       }
 
+      // Aplica o nome formatado no card principal
       const areaObj = {
         id: 'dynamic-' + index + '-' + Date.now(),
-        name: config.name === 'Ponto Central' ? 'Área Inspecionada' : config.name,
+        name: config.name === 'Ponto Central' ? nomeCentral : config.name,
         lat: pontoLat,
         lng: pontoLng,
         level: nivel,
@@ -147,14 +211,12 @@ const inspecionarCoordenadaExpandida = async (lat, lng) => {
         rain: chuva
       }
 
-      // O ponto central abre no painel lateral de vidro automaticamente
       if (index === 0) {
         selectedArea.value = areaObj
       }
 
       const corMapeada = alertColors[nivel]
-
-      // Cria o marcador com a cor dinâmica do nível de chuva detectado!
+      
       const radarPinIcon = L.divIcon({
         className: 'custom-pin',
         html: `
@@ -171,9 +233,9 @@ const inspecionarCoordenadaExpandida = async (lat, lng) => {
       })
 
       const marker = L.marker([pontoLat, pontoLng], { icon: radarPinIcon })
-
+      
       marker.on('click', (e) => {
-        L.DomEvent.stopPropagation(e) // Impede o mapa de interpretar como clique fora
+        L.DomEvent.stopPropagation(e)
         selectedArea.value = areaObj
         if (mapInstance) mapInstance.flyTo([pontoLat, pontoLng], 15, { duration: 1.2 })
       })
@@ -183,9 +245,6 @@ const inspecionarCoordenadaExpandida = async (lat, lng) => {
       }
     })
 
-    if (mapInstance) {
-      mapInstance.flyTo([lat, lng], 13, { duration: 1.5 })
-    }
   } catch (error) {
     console.error("Erro na varredura de raio estendido:", error)
   }
@@ -247,7 +306,7 @@ onMounted(async () => {
   L.control.zoom({ position: 'topright' }).addTo(mapInstance)
 
   markersLayer = L.layerGroup().addTo(mapInstance)
-  dynamicMarkersLayer = L.layerGroup().addTo(mapInstance) // Ativa a camada do radar estendido
+  dynamicMarkersLayer = L.layerGroup().addTo(mapInstance)
 
   mapInstance.on('click', async (e) => {
     fecharCard()
@@ -268,9 +327,42 @@ onUnmounted(() => {
   <div style="position: relative; width: 100vw; height: 100vh; overflow: hidden; background: #0f172a;">
     <div ref="mapElement" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 0;"></div>
 
+  <div class="absolute top-4 left-1/2 -translate-x-1/2 z-[2000] w-[90%] md:w-[28rem]">
+      <form @submit.prevent="buscarLocal" class="relative flex items-center w-full">
+        <input 
+          v-model="searchQuery"
+          type="text" 
+          placeholder="Digite a cidade (ex: Recife) e aperte Enter..." 
+          class="w-full bg-slate-900/95 backdrop-blur-xl text-white px-5 py-3.5 pr-12 rounded-2xl border border-slate-700 shadow-[0_10px_30px_rgba(0,0,0,0.5)] focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-sm font-medium placeholder-slate-500"
+        >
+        <button type="submit" class="absolute right-2 p-2 text-slate-400 hover:text-blue-400 transition-colors">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-5 h-5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+          </svg>
+        </button>
+      </form>
+
+      <transition name="fade-slide">
+        <ul v-if="searchResults.length > 0" class="absolute top-full left-0 w-full mt-2 bg-slate-900/95 backdrop-blur-xl border border-slate-700 rounded-2xl shadow-2xl overflow-hidden z-[2001] max-h-60 overflow-y-auto custom-scrollbar">
+          <li @click="searchResults = []" class="px-4 py-2 bg-slate-800 text-xs text-slate-400 text-right cursor-pointer hover:text-white transition-colors">
+            Fechar ✕
+          </li>
+          
+          <li v-for="(result, index) in searchResults" :key="index" @click="selecionarLocal(result)" class="px-5 py-3 hover:bg-slate-800 cursor-pointer border-b border-slate-800/50 last:border-0 transition-colors flex flex-col group">
+            <span class="text-sm font-bold text-blue-400 group-hover:text-white transition-colors truncate">
+              {{ result.display_name.split(',')[0] }}
+            </span>
+            <span class="text-[11px] text-slate-400 truncate mt-0.5">
+              {{ result.display_name.split(',').slice(1).join(', ') }}
+            </span>
+          </li>
+        </ul>
+      </transition>
+    </div>
+
     <transition name="fade-slide">
       <div v-if="selectedArea"
-        class="absolute top-4 right-4 md:top-6 md:right-6 z-[2000] w-[90%] md:w-80 bg-slate-900/90 backdrop-blur-xl text-white p-6 rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] border border-slate-700 mx-auto left-0 right-0 md:left-auto md:mx-0">
+        class="absolute top-20 right-4 md:top-6 md:right-6 z-[2000] w-[90%] md:w-80 bg-slate-900/90 backdrop-blur-xl text-white p-6 rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] border border-slate-700 mx-auto left-0 right-0 md:left-auto md:mx-0">
 
         <button @click="fecharCard"
           class="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors bg-slate-800 rounded-full w-8 h-8 flex items-center justify-center">
@@ -322,7 +414,7 @@ onUnmounted(() => {
           :class="riskAreas.length > 0 ? 'bg-green-500' : 'bg-red-500'"></span>
       </div>
 
-   <div class="flex gap-2 md:mb-6 mb-3 shrink-0 text-[10px] uppercase font-bold text-slate-400 flex-wrap">
+      <div class="flex gap-2 md:mb-6 mb-3 shrink-0 text-[10px] uppercase font-bold text-slate-400 flex-wrap">
         <button @click="toggleFilter('all')"
           :class="activeFilter === 'all' ? 'opacity-100 scale-105 text-white' : 'opacity-50 hover:opacity-100'"
           class="flex items-center gap-1 transition-all duration-300 mr-2">
