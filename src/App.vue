@@ -185,9 +185,8 @@ const inspecionarCoordenadaExpandida = async (lat, lng, nomeCentral = 'Área Ins
       dynamicMarkersLayer = L.layerGroup().addTo(mapInstance);
     }
 
-const HGBRASIL_KEY = '631a8bba';
 
-const urlHG = `https://api.hgbrasil.com/weather?key=${HGBRASIL_KEY}&lat=${lat}&lon=${lng}`;
+    const response = await fetch(`https://sky-radar-api-production.up.railway.app/api/weather/${lat}/${lng}`);
 
     let tempApi = '--';
     let chuvaApi = 0;
