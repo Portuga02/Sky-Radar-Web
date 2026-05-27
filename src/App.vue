@@ -35,15 +35,19 @@ const iniciarBussolaDinamica = () => {
 
 const fetchAlerts = async () => {
   try {
-    const res = await fetch('https://sky-radar-api-production.up.railway.app/api/alerts')
+    const baseUrl = import.meta.env.VITE_API_URL || 'https://sky-radar-api-production.up.railway.app';
+    const res = await fetch(`${baseUrl}/api/alerts`);
+
     if (res.ok) {
       riskAreas.value = (await res.json()).map(area => {
-        const c = parseFloat(area.rain) || 0
-        return { ...area, level: c > 15 ? 'red' : c > 5 ? 'orange' : c > 0 ? 'yellow' : 'green' }
-      })
-      renderMarkers()
+        const c = parseFloat(area.rain) || 0;
+        return { ...area, level: c > 15 ? 'red' : c > 5 ? 'orange' : c > 0 ? 'yellow' : 'green' };
+      });
+      renderMarkers();
     }
-  } catch (e) { console.warn("⚠️ Operando em modo local.") }
+  } catch (e) {
+    console.warn("⚠️ API de alertas indisponível.", e);
+  }
 }
 
 const toggleFilter = (level) => {
@@ -97,7 +101,8 @@ const inspecionarCoordenadaExpandida = async (lat, lng, nomeCentral = 'Área Ins
     let tempApi = '--', chuvaApi = 0, condicaoDesc = 'Buscando condições...', iconSlug = 'cloudly_day', ventoApi = '0 km/h', turnoApi = 'dia'
 
     try {
-      const res = await fetch(`https://sky-radar-api-production.up.railway.app/api/weather/${lat}/${lng}`)
+      const baseUrl = import.meta.env.VITE_API_URL || 'https://sky-radar-api-production.up.railway.app';
+      const res = await fetch(`${baseUrl}/api/weather/${lat}/${lng}`);
       if (res.ok) {
         const fullData = await res.json()
         const data = fullData.results || fullData
@@ -156,23 +161,28 @@ const inspecionarCoordenadaExpandida = async (lat, lng, nomeCentral = 'Área Ins
 
 const resetView = () => { if (mapInstance) { mapInstance.flyTo([-8.05, -34.9], 12, { duration: 1.5 }); fecharCard() } }
 
+
 const buscarLocal = async () => {
-  if (!searchQuery.value.trim()) return
+  if (!searchQuery.value.trim()) return;
+
   try {
-  
-    const res = await fetch(`https://sky-radar-api-production.up.railway.app/api/search/${encodeURIComponent(searchQuery.value)}`)
-    if (!res.ok) return
-    const data = await res.json()
-    if (data?.length) {
-      searchResults.value = data
-    } else {
-      searchResults.value = []
-      alert('Local não encontrado.')
-    }
-  } catch (e) {
-    console.error("Erro na busca:", e)
+
+    const baseUrl = import.meta.env.VITE_API_URL || 'https://sky-radar-api-production.up.railway.app';
+
+    const response = await fetch(`${baseUrl}/api/search/${encodeURIComponent(searchQuery.value)}`);
+
+    if (!response.ok) throw new Error('Falha na requisição');
+
+    const data = await response.json();
+
+    searchResults.value = data?.length ? data : [];
+    if (searchResults.value.length === 0) alert('Nenhum local encontrado.');
+
+  } catch (error) {
+    console.error("Erro na busca:", error);
+    alert('Erro ao conectar com o servidor de busca.');
   }
-}
+};
 
 const selecionarLocal = async (local) => {
   searchResults.value = []; searchQuery.value = ''; fecharCard()
@@ -270,7 +280,8 @@ onUnmounted(() => { if (mapInstance) { mapInstance.remove(); mapInstance = null 
         <button @click="fecharCard"
           class="absolute top-4 right-4 text-slate-400 hover:text-white bg-slate-800 rounded-full w-8 h-8 flex items-center justify-center z-10">✕</button>
         <h3 class="text-2xl font-black tracking-tighter pr-8 truncate flex items-center gap-2">{{ selectedArea.name }}
-          <span class="text-xl filter drop-shadow-md">{{ selectedArea.turn === 'dia' ? '☀️' : '🌙' }}</span></h3>
+          <span class="text-xl filter drop-shadow-md">{{ selectedArea.turn === 'dia' ? '☀️' : '🌙' }}</span>
+        </h3>
         <div
           class="mt-2 inline-flex items-center gap-2 px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-widest border"
           :style="{ borderColor: alertColors[selectedArea.level], backgroundColor: alertColors[selectedArea.level] + '20', color: alertColors[selectedArea.level] }">
@@ -293,7 +304,7 @@ onUnmounted(() => { if (mapInstance) { mapInstance.remove(); mapInstance = null 
           <div class="w-px h-10 bg-slate-700"></div>
           <div class="flex flex-col items-center w-1/3"><span class="text-2xl filter drop-shadow-md">💨</span><span
               class="text-lg font-black mt-1 text-teal-400">{{ selectedArea.wind ? selectedArea.wind.replace(' km/h',
-              '') : '0' }}<span class="text-xs text-slate-400">km/h</span></span><span
+                '') : '0' }}<span class="text-xs text-slate-400">km/h</span></span><span
               class="text-[9px] text-slate-500 uppercase font-bold tracking-widest mt-0.5">Vento</span></div>
         </article>
         <p class="text-xs text-slate-300 mt-5 font-medium leading-relaxed bg-slate-800 p-4 rounded-xl border-l-4 shadow-md"
