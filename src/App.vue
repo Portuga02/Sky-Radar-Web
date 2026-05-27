@@ -376,13 +376,27 @@ onUnmounted(() => { if (mapInstance) { mapInstance.remove(); mapInstance = null 
         title="Visão Geral"><span class="text-lg md:text-base">📍</span><span
           class="hidden md:inline font-black text-xs uppercase tracking-widest">Visão Geral</span></button>
       <div title="Norte Verdadeiro"
-        class="bg-slate-900/90 backdrop-blur-md border border-slate-700 w-10 h-10 md:w-12 md:h-12 md:rounded-2xl rounded-full flex flex-col items-center justify-center shadow-xl cursor-default transition-all">
-        <span class="text-red-500 text-[9px] md:text-[10px] font-black -mb-1 z-10">N</span>
-        <svg viewBox="0 0 24 24" class="w-5 h-5 md:w-6 md:h-6 z-0 transition-transform duration-200 ease-out"
+        class="bg-slate-900/90 backdrop-blur-md border border-slate-700 w-12 h-12 rounded-full flex items-center justify-center shadow-xl cursor-default transition-all relative overflow-hidden">
+
+        <svg viewBox="0 0 100 100" class="absolute w-full h-full p-1 opacity-70">
+          <line x1="50" y1="5" x2="50" y2="95" stroke="#475569" stroke-width="1" />
+          <line x1="5" y1="50" x2="95" y2="50" stroke="#475569" stroke-width="1" />
+
+          <text x="50" y="15" text-anchor="middle" font-size="12" fill="white" stroke="black" stroke-width="0.5"
+            font-weight="bold">N</text>
+          <text x="50" y="98" text-anchor="middle" font-size="12" fill="white" stroke="black" stroke-width="0.5"
+            font-weight="bold">S</text>
+          <text x="2" y="54" text-anchor="start" font-size="12" fill="white" stroke="black" stroke-width="0.5"
+            font-weight="bold">O</text>
+          <text x="98" y="54" text-anchor="end" font-size="12" fill="white" stroke="black" stroke-width="0.5"
+            font-weight="bold">L</text>
+        </svg>
+
+        <svg viewBox="0 0 24 24" class="w-8 h-8 z-10 transition-transform duration-200 ease-out"
           :style="{ transform: `rotate(${anguloBussola}deg)` }">
-          <polygon points="12,2 15,12 9,12" fill="#ef4444" />
-          <polygon points="12,22 15,12 9,12" fill="#94a3b8" />
-          <circle cx="12" cy="12" r="2.5" fill="#f8fafc" />
+          <path d="M12 2L9 12H15L12 2Z" fill="#ef4444" />
+          <path d="M12 22L15 12H9L12 22Z" fill="#f8fafc" />
+          <circle cx="12" cy="12" r="2" fill="#334155" />
         </svg>
       </div>
     </nav>
