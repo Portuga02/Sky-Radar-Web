@@ -186,7 +186,8 @@ const inspecionarCoordenadaExpandida = async (lat, lng, nomeCentral = 'Área Ins
     }
 
 const HGBRASIL_KEY = '631a8bba';
-    const urlHG = `https://api.hgbrasil.com/weather?format=json-cors&key=${HGBRASIL_KEY}&lat=${lat}&lon=${lng}`;
+
+const urlHG = `https://api.hgbrasil.com/weather?key=${HGBRASIL_KEY}&lat=${lat}&lon=${lng}`;
 
     let tempApi = '--';
     let chuvaApi = 0;
