@@ -375,30 +375,33 @@ onUnmounted(() => { if (mapInstance) { mapInstance.remove(); mapInstance = null 
         class="bg-slate-900/90 backdrop-blur-md text-white w-10 h-10 md:w-auto md:px-6 md:py-3 rounded-full md:rounded-2xl border border-slate-700 shadow-xl hover:bg-slate-800 transition-all flex items-center justify-center gap-2"
         title="Visão Geral"><span class="text-lg md:text-base">📍</span><span
           class="hidden md:inline font-black text-xs uppercase tracking-widest">Visão Geral</span></button>
-      <div title="Norte Verdadeiro"
-        class="bg-slate-900/90 backdrop-blur-md border border-slate-700 w-12 h-12 rounded-full flex items-center justify-center shadow-xl cursor-default transition-all relative overflow-hidden">
+     <div title="Norte Verdadeiro"
+  class="bg-slate-900/90 backdrop-blur-md border border-slate-700 w-16 h-16 rounded-full flex items-center justify-center shadow-2xl cursor-default transition-all relative overflow-hidden ring-2 ring-slate-700">
+  
+  <svg viewBox="0 0 100 100" class="absolute w-full h-full p-1 opacity-90">
+    <path d="M50 5 L53 50 L50 95 L47 50 Z" fill="#475569" /> <path d="M5 50 L50 47 L95 50 L50 53 Z" fill="#475569" /> <path d="M20 20 L50 48 L80 80 L50 52 Z" fill="#475569" /> <path d="M80 20 L50 48 L20 80 L50 52 Z" fill="#475569" /> <path d="M50 5 L51 50 L50 95 L49 50 Z" fill="#334155" />
+    <path d="M5 50 L50 49 L95 50 L50 51 Z" fill="#334155" />
+    <path d="M20 20 L50 49 L80 80 L50 51 Z" fill="#334155" />
+    <path d="M80 20 L50 49 L20 80 L50 51 Z" fill="#334155" />
 
-        <svg viewBox="0 0 100 100" class="absolute w-full h-full p-1 opacity-70">
-          <line x1="50" y1="5" x2="50" y2="95" stroke="#475569" stroke-width="1" />
-          <line x1="5" y1="50" x2="95" y2="50" stroke="#475569" stroke-width="1" />
+    <circle cx="50" cy="50" r="10" fill="#1e293b" stroke="#eab308" stroke-width="1.2" />
 
-          <text x="50" y="15" text-anchor="middle" font-size="12" fill="white" stroke="black" stroke-width="0.5"
-            font-weight="bold">N</text>
-          <text x="50" y="98" text-anchor="middle" font-size="12" fill="white" stroke="black" stroke-width="0.5"
-            font-weight="bold">S</text>
-          <text x="2" y="54" text-anchor="start" font-size="12" fill="white" stroke="black" stroke-width="0.5"
-            font-weight="bold">O</text>
-          <text x="98" y="54" text-anchor="end" font-size="12" fill="white" stroke="black" stroke-width="0.5"
-            font-weight="bold">L</text>
-        </svg>
+    <text x="50" y="10" text-anchor="middle" font-size="9" fill="white" stroke="black" stroke-width="0.3" font-weight="bold">N</text>
+    <text x="50" y="98" text-anchor="middle" font-size="9" fill="white" stroke="black" stroke-width="0.3" font-weight="bold">S</text>
+    <text x="2" y="53" text-anchor="start" font-size="9" fill="white" stroke="black" stroke-width="0.3" font-weight="bold">O</text>
+    <text x="98" y="53" text-anchor="end" font-size="9" fill="white" stroke="black" stroke-width="0.3" font-weight="bold">L</text>
+    
+    <text x="80" y="22" text-anchor="end" font-size="6" fill="#f8fafc" stroke="black" stroke-width="0.1">NE</text>
+    <text x="20" y="22" text-anchor="start" font-size="6" fill="#f8fafc" stroke="black" stroke-width="0.1">NO</text>
+    <text x="80" y="85" text-anchor="end" font-size="6" fill="#f8fafc" stroke="black" stroke-width="0.1">SE</text>
+    <text x="20" y="85" text-anchor="start" font-size="6" fill="#f8fafc" stroke="black" stroke-width="0.1">SO</text>
+  </svg>
 
-        <svg viewBox="0 0 24 24" class="w-8 h-8 z-10 transition-transform duration-200 ease-out"
-          :style="{ transform: `rotate(${anguloBussola}deg)` }">
-          <path d="M12 2L9 12H15L12 2Z" fill="#ef4444" />
-          <path d="M12 22L15 12H9L12 22Z" fill="#f8fafc" />
-          <circle cx="12" cy="12" r="2" fill="#334155" />
-        </svg>
-      </div>
+  <svg viewBox="0 0 24 24" class="w-10 h-10 z-10 transition-transform duration-200 ease-out drop-shadow-xl"
+    :style="{ transform: `rotate(${anguloBussola}deg)` }">
+    <path d="M12 2L14 12L12 22L10 12L12 2Z" fill="#eab308" /> <path d="M12 2L12 12L10 12Z" fill="#ca8a04" /> <circle cx="12" cy="12" r="1.5" fill="white" stroke="#eab308" stroke-width="0.5" />
+  </svg>
+</div>
     </nav>
   </main>
 </template>
