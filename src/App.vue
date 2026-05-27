@@ -100,6 +100,7 @@ const inspecionarCoordenadaExpandida = async (lat, lng, nomeCentral = 'Área Ins
 
     let tempApi = '--', chuvaApi = 0, condicaoDesc = 'Buscando condições...', iconSlug = 'cloudly_day', ventoApi = '0 km/h', turnoApi = 'dia'
 
+
     try {
       const baseUrl = import.meta.env.VITE_API_URL || 'https://sky-radar-api-production.up.railway.app';
       const res = await fetch(`${baseUrl}/api/weather/${lat}/${lng}`);
@@ -113,8 +114,8 @@ const inspecionarCoordenadaExpandida = async (lat, lng, nomeCentral = 'Área Ins
           ventoApi = data.wind_speedy || '0 km/h'
           turnoApi = data.currently || 'dia'
 
-          const desc = condicaoDesc.toLowerCase()
-          chuvaApi = /tempestade|forte|toró/.test(desc) ? 28 : /chuva|chuvisco|fustada/.test(desc) ? 12 : /neblina|garoa|instável/.test(desc) ? 4 : 0
+          const desc = condicaoDesc.toLowerCase();  //eu tinha colocado aqui amigo
+          chuvaApi = /tempestade|forte|toró/.test(desc) ? 28 : /chuva|chuvisco|fustada|pancada|chuvoso/.test(desc) ? 12 : /neblina|garoa|instável/.test(desc) ? 4 : 0;
         }
       }
     } catch (e) { console.warn("⚠️ API falhou.", e) }
