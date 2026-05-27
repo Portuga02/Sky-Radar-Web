@@ -15,7 +15,7 @@ const selectedArea = ref(null)
 const searchQuery = ref('')
 const searchResults = ref([])
 const localRadarData = ref([])
-
+const anguloBussola = ref(0);
 const alertColors = {
   green: '#22c55e',
   yellow: '#facc15',
@@ -46,10 +46,32 @@ const criticalAlerts = computed(() => {
   const pesoAlerta = { red: 4, orange: 3, yellow: 2, green: 1, blue: 0 }
   return list.sort((a, b) => (pesoAlerta[b.level] || 0) - (pesoAlerta[a.level] || 0))
 })
+// 2. Função que lê os sensores do smartphone
+const iniciarBussolaDinamica = () => {
+  if (window.DeviceOrientationEvent) {
+    window.addEventListener('deviceorientation', (event) => {
+      // iOS usa webkitCompassHeading, Android usa alpha
+      if (event.webkitCompassHeading) {
+        // Dispositivos Apple
+        anguloBussola.value = event.webkitCompassHeading;
+      } else if (event.alpha !== null) {
+        // Dispositivos Android (cálculo de orientação invertida)
+        anguloBussola.value = 360 - event.alpha;
+      }
+    }, true);
+  } else {
+    console.warn("Giroscópio não suportado neste dispositivo.");
+  }
+};
 
+// 3. Inicia o sensor quando a tela carregar
+onMounted(() => {
+  iniciarBussolaDinamica();
+});
 const fetchAlerts = async () => {
   try {
-    const response = await fetch('http://localhost:8000/api/alerts')
+    const response = await fetch('https://sky-radar-api-production.up.railway.app/api/alerts')
+    // const response = await fetch('http://localhost:8000/api/alerts')
     if (response.ok) {
       const dbData = await response.json()
 
@@ -157,12 +179,22 @@ const renderMarkers = () => {
 
 const inspecionarCoordenadaExpandida = async (lat, lng, nomeCentral = 'Área Inspecionada') => {
   try {
-    if (dynamicMarkersLayer) dynamicMarkersLayer.clearLayers(); else dynamicMarkersLayer = L.layerGroup().addTo(mapInstance);
+    if (dynamicMarkersLayer) {
+      dynamicMarkersLayer.clearLayers();
+    } else {
+      dynamicMarkersLayer = L.layerGroup().addTo(mapInstance);
+    }
 
-    const HGBRASIL_KEY = '631a8bba';
+const HGBRASIL_KEY = '631a8bba';
     const urlHG = `https://api.hgbrasil.com/weather?format=json-cors&key=${HGBRASIL_KEY}&lat=${lat}&lon=${lng}`;
 
-    let tempApi = '--', chuvaApi = 0, condicaoDesc = 'Buscando condições...', iconSlug = 'cloudly_day';
+    let tempApi = '--';
+    let chuvaApi = 0;
+    let condicaoDesc = 'Buscando condições...';
+    let iconSlug = 'cloudly_day';
+    // 💨 NOVAS VARIÁVEIS PARA VENTO E TURNO
+    let ventoApi = '0 km/h'; 
+    let turnoApi = 'dia'; 
 
     try {
       const response = await fetch(urlHG);
@@ -172,25 +204,57 @@ const inspecionarCoordenadaExpandida = async (lat, lng, nomeCentral = 'Área Ins
           tempApi = data.results.temp || '--';
           condicaoDesc = data.results.description || 'Condições normais';
           iconSlug = data.results.condition_slug || 'cloudly_day';
+          
+          // CAPTURANDO VENTO E DIA/NOITE DA API
+          ventoApi = data.results.wind_speedy || '0 km/h'; 
+          turnoApi = data.results.currently || 'dia'; 
+
           const descLower = condicaoDesc.toLowerCase();
-          if (descLower.includes('tempestade') || descLower.includes('forte')) chuvaApi = 25;
-          else if (descLower.includes('chuva') || descLower.includes('chuvisco')) chuvaApi = 12;
-          else if (descLower.includes('nublado') || descLower.includes('tempo limpo')) chuvaApi = 0;
+          if (descLower.includes('tempestade') || descLower.includes('forte') || descLower.includes('toró')) {
+            chuvaApi = 28; 
+          } else if (descLower.includes('chuva') || descLower.includes('chuvisco') || descLower.includes('fustada')) {
+            chuvaApi = 12; 
+          } else if (descLower.includes('neblina') || descLower.includes('garoa') || descLower.includes('instável')) {
+            chuvaApi = 4;  
+          } else if (descLower.includes('nublado') || descLower.includes('tempo limpo') || descLower.includes('parcialmente')) {
+            chuvaApi = 0;  
+          }
         }
       }
-    } catch (apiError) { console.warn("⚠️ HG Brasil falhou.", apiError); }
+    } catch (apiError) {
+      console.warn("⚠️ HG Brasil falhou.", apiError);
+    }
 
+    // 🛰️ MALHA DE LONGO ALCANCE (17 Pontos - Escaneamento Regional)
     const malhaRadar = [
       { name: 'Ponto Central', dLat: 0, dLng: 0 },
-      { name: 'Vetor Norte', dLat: 0.008, dLng: 0 },
-      { name: 'Vetor Sul', dLat: -0.008, dLng: 0 },
-      { name: 'Vetor Leste', dLat: 0, dLng: 0.010 },
-      { name: 'Vetor Oeste', dLat: 0, dLng: -0.010 }
+
+      // 📍 Anel Interno (Cobertura do Bairro/Perímetro Próximo)
+      { name: 'Vetor Norte', dLat: 0.024, dLng: 0 },
+      { name: 'Vetor Sul', dLat: -0.024, dLng: 0 },
+      { name: 'Vetor Leste', dLat: 0, dLng: 0.030 },
+      { name: 'Vetor Oeste', dLat: 0, dLng: -0.030 },
+      { name: 'Vetor Nordeste', dLat: 0.018, dLng: 0.022 },
+      { name: 'Vetor Noroeste', dLat: 0.018, dLng: -0.022 },
+      { name: 'Vetor Sudeste', dLat: -0.018, dLng: 0.022 },
+      { name: 'Vetor Sudoeste', dLat: -0.018, dLng: -0.022 },
+
+      // 📡 Anel Externo (Cobertura de Longa Distância / Cidades Vizinhas)
+      { name: 'Extremo Norte', dLat: 0.048, dLng: 0 },
+      { name: 'Extremo Sul', dLat: -0.048, dLng: 0 },
+      { name: 'Extremo Leste', dLat: 0, dLng: 0.060 },
+      { name: 'Extremo Oeste', dLat: 0, dLng: -0.060 },
+      { name: 'Extremo Nordeste', dLat: 0.036, dLng: 0.044 },
+      { name: 'Extremo Noroeste', dLat: 0.036, dLng: -0.044 },
+      { name: 'Extremo Sudeste', dLat: -0.036, dLng: 0.044 },
+      { name: 'Extremo Sudoeste', dLat: -0.036, dLng: -0.044 }
     ];
 
-    malhaRadar.forEach((config, index) => {
-      const pontoLat = lat + config.dLat, pontoLng = lng + config.dLng;
-      let chuvaDoPonto = index === 0 ? chuvaApi : Math.max(0, chuvaApi - Math.floor(Math.random() * 3));
+   malhaRadar.forEach((config, index) => {
+      const pontoLat = lat + config.dLat;
+      const pontoLng = lng + config.dLng;
+
+      let chuvaDoPonto = index === 0 ? chuvaApi : Math.max(0, chuvaApi - Math.floor(Math.random() * 5));
 
       let nivel = 'green';
       if (chuvaDoPonto > 0 && chuvaDoPonto <= 5) nivel = 'yellow';
@@ -198,17 +262,24 @@ const inspecionarCoordenadaExpandida = async (lat, lng, nomeCentral = 'Área Ins
       else if (chuvaDoPonto > 15) nivel = 'red';
 
       const areaObj = {
-        id: 'dynamic-' + index + '-' + Date.now(),
+        id: `dynamic-${index}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
         name: config.name === 'Ponto Central' ? nomeCentral : config.name,
-        lat: pontoLat, lng: pontoLng, level: nivel,
-        desc: `${config.name === 'Ponto Central' ? nomeCentral : config.name} (HG Brasil). ${condicaoDesc}`,
-        temp: tempApi, rain: chuvaDoPonto, iconSlug: iconSlug
+        lat: pontoLat,
+        lng: pontoLng,
+        level: nivel,
+        desc: `${config.name === 'Ponto Central' ? nomeCentral : config.name} (SkyRadar). ${condicaoDesc}`,
+        temp: tempApi,
+        rain: chuvaDoPonto,
+        wind: ventoApi,  // 💨 Vento salvo no card
+        turn: turnoApi,  // 🌙/☀️ Turno salvo no card
+        iconSlug: iconSlug
       };
 
       if (index === 0) selectedArea.value = areaObj;
       localRadarData.value.unshift(areaObj);
 
       const corMapeada = alertColors[nivel] || '#10B981';
+
       const radarPinIcon = L.divIcon({
         className: 'marker-custom-radar',
         html: `
@@ -223,7 +294,8 @@ const inspecionarCoordenadaExpandida = async (lat, lng, nomeCentral = 'Área Ins
             </div>
           </div>
         `,
-        iconSize: [42, 42], iconAnchor: [21, 42]
+        iconSize: [42, 42],
+        iconAnchor: [21, 42]
       });
 
       const marker = L.marker([pontoLat, pontoLng], { icon: radarPinIcon });
@@ -234,9 +306,10 @@ const inspecionarCoordenadaExpandida = async (lat, lng, nomeCentral = 'Área Ins
       });
       dynamicMarkersLayer.addLayer(marker);
     });
-
-    if (mapInstance) mapInstance.flyTo([lat, lng], 14, { duration: 1.5 });
-  } catch (error) { console.error("Erro na varredura:", error) }
+    if (mapInstance) mapInstance.flyTo([lat, lng], 12, { duration: 1.5 });
+  } catch (error) {
+    console.error("Erro na varredura:", error)
+  }
 }
 
 const resetView = () => {
@@ -290,9 +363,11 @@ const locateUser = () => {
 
 onMounted(async () => {
   if (!mapElement.value || mapInstance) return
+
   mapInstance = L.map(mapElement.value, { zoomControl: false, trackResize: true }).setView([-8.05, -34.9], 12)
+
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(mapInstance)
-  L.control.zoom({ position: 'topright' }).addTo(mapInstance)
+  L.control.zoom({ position: 'bottomright' }).addTo(mapInstance)
 
   markersLayer = L.layerGroup().addTo(mapInstance)
   dynamicMarkersLayer = L.layerGroup().addTo(mapInstance)
@@ -362,14 +437,18 @@ onUnmounted(() => { if (mapInstance) { mapInstance.remove(); mapInstance = null;
       </transition>
     </header>
 
-    <transition name="slide-up">
+  <transition name="slide-up">
       <aside v-if="selectedArea"
-        class="absolute z-[3000] bottom-0 left-0 w-full md:bottom-auto md:top-6 md:right-6 md:left-auto md:w-80 bg-slate-900/95 backdrop-blur-xl text-white p-6 pb-8 md:pb-6 rounded-t-3xl md:rounded-3xl shadow-[0_-20px_50px_rgba(0,0,0,0.5)] md:shadow-2xl border-t md:border border-slate-700">
+        :class="selectedArea.turn === 'dia' ? 'bg-gradient-to-br from-slate-800/95 to-slate-900/95' : 'bg-gradient-to-br from-slate-900/95 to-black/95'"
+        class="absolute z-[3000] bottom-0 left-0 w-full md:bottom-auto md:top-6 md:right-6 md:left-auto md:w-80 backdrop-blur-xl text-white p-6 pb-8 md:pb-6 rounded-t-3xl md:rounded-3xl shadow-[0_-20px_50px_rgba(0,0,0,0.5)] md:shadow-2xl border-t md:border border-slate-700 transition-colors duration-500">
 
         <button @click="fecharCard"
-          class="absolute top-4 right-4 text-slate-400 hover:text-white bg-slate-800 rounded-full w-8 h-8 flex items-center justify-center">✕</button>
+          class="absolute top-4 right-4 text-slate-400 hover:text-white bg-slate-800 rounded-full w-8 h-8 flex items-center justify-center z-10">✕</button>
 
-        <h3 class="text-2xl font-black tracking-tighter pr-8 truncate">{{ selectedArea.name }}</h3>
+        <h3 class="text-2xl font-black tracking-tighter pr-8 truncate flex items-center gap-2">
+          {{ selectedArea.name }}
+          <span class="text-xl filter drop-shadow-md">{{ selectedArea.turn === 'dia' ? '☀️' : '🌙' }}</span>
+        </h3>
 
         <div
           class="mt-2 inline-flex items-center gap-2 px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-widest border"
@@ -379,27 +458,36 @@ onUnmounted(() => { if (mapInstance) { mapInstance.remove(); mapInstance = null;
           {{ nivelNomes[selectedArea.level] }}
         </div>
 
-        <article
-          class="flex justify-around items-center mt-6 p-4 bg-slate-800/50 rounded-2xl border border-slate-700/50">
-          <div class="flex flex-col items-center">
-            <span class="text-3xl filter drop-shadow-md">🌡️</span>
-            <span class="text-xl font-black mt-1">{{ selectedArea.temp ?? '--' }}<span
-                class="text-sm text-slate-400">°C</span></span>
-            <span class="text-[9px] text-slate-500 uppercase font-bold tracking-widest">Temp</span>
+        <article class="flex justify-between items-center mt-6 p-4 bg-slate-800/60 rounded-2xl border border-slate-700/50 shadow-inner">
+          
+          <div class="flex flex-col items-center w-1/3">
+            <span class="text-2xl filter drop-shadow-md">🌡️</span>
+            <span class="text-lg font-black mt-1">{{ selectedArea.temp ?? '--' }}<span class="text-xs text-slate-400">°C</span></span>
+            <span class="text-[9px] text-slate-500 uppercase font-bold tracking-widest mt-0.5">Temp</span>
           </div>
-          <div class="w-px h-12 bg-slate-700"></div>
-          <div class="flex flex-col items-center">
+          
+          <div class="w-px h-10 bg-slate-700"></div>
+          
+          <div class="flex flex-col items-center w-1/3">
             <img v-if="selectedArea.iconSlug"
               :src="'https://assets.hgbrasil.com/weather/icons/conditions/' + selectedArea.iconSlug + '.svg'"
-              class="w-11 h-11 filter drop-shadow-md object-contain" alt="clima" />
-            <span v-else class="text-3xl">☀️</span>
-            <span class="text-xl font-black mt-1 text-blue-400">{{ selectedArea.rain ?? '0' }}<span
-                class="text-sm text-slate-400">mm</span></span>
-            <span class="text-[9px] text-slate-500 uppercase font-bold tracking-widest">Chuva</span>
+              class="w-8 h-8 filter drop-shadow-md object-contain" alt="clima" />
+            <span v-else class="text-2xl">☁️</span>
+            <span class="text-lg font-black mt-1 text-blue-400">{{ selectedArea.rain ?? '0' }}<span class="text-xs text-slate-400">mm</span></span>
+            <span class="text-[9px] text-slate-500 uppercase font-bold tracking-widest mt-0.5">Chuva</span>
           </div>
+
+          <div class="w-px h-10 bg-slate-700"></div>
+
+          <div class="flex flex-col items-center w-1/3">
+            <span class="text-2xl filter drop-shadow-md">💨</span>
+            <span class="text-lg font-black mt-1 text-teal-400">{{ selectedArea.wind ? selectedArea.wind.replace(' km/h', '') : '0' }}<span class="text-xs text-slate-400">km/h</span></span>
+            <span class="text-[9px] text-slate-500 uppercase font-bold tracking-widest mt-0.5">Vento</span>
+          </div>
+
         </article>
 
-        <p class="text-xs text-slate-300 mt-5 font-medium leading-relaxed bg-slate-800 p-4 rounded-xl border-l-4"
+        <p class="text-xs text-slate-300 mt-5 font-medium leading-relaxed bg-slate-800 p-4 rounded-xl border-l-4 shadow-md"
           :style="{ borderColor: alertColors[selectedArea.level] }">
           {{ selectedArea.desc }}
         </p>
@@ -465,19 +553,33 @@ onUnmounted(() => { if (mapInstance) { mapInstance.remove(); mapInstance = null;
     </aside>
 
     <nav
-      class="absolute z-[1500] top-24 right-4 flex flex-col gap-3 md:top-auto md:bottom-6 md:left-1/2 md:-translate-x-1/2 md:right-auto md:flex-row">
+      class="absolute z-[1500] top-24 right-4 flex flex-col items-center gap-3 md:top-auto md:bottom-6 md:left-1/2 md:-translate-x-1/2 md:right-auto md:flex-row">
+
       <button @click="locateUser"
         class="bg-blue-600/90 backdrop-blur-md text-white w-10 h-10 md:w-auto md:px-6 md:py-3 rounded-full md:rounded-2xl border border-blue-500 shadow-xl hover:bg-blue-700 transition-all flex items-center justify-center gap-2"
         title="Onde Estou?">
-        <span class="text-lg md:text-base">🎯</span> <span
-          class="hidden md:inline font-black text-xs uppercase tracking-widest">Onde Estou?</span>
+        <span class="text-lg md:text-base">🎯</span>
+        <span class="hidden md:inline font-black text-xs uppercase tracking-widest">Onde Estou?</span>
       </button>
+
       <button @click="resetView"
         class="bg-slate-900/90 backdrop-blur-md text-white w-10 h-10 md:w-auto md:px-6 md:py-3 rounded-full md:rounded-2xl border border-slate-700 shadow-xl hover:bg-slate-800 transition-all flex items-center justify-center gap-2"
         title="Visão Geral">
-        <span class="text-lg md:text-base">📍</span> <span
-          class="hidden md:inline font-black text-xs uppercase tracking-widest">Visão Geral</span>
+        <span class="text-lg md:text-base">📍</span>
+        <span class="hidden md:inline font-black text-xs uppercase tracking-widest">Visão Geral</span>
       </button>
+
+      <div title="Norte Verdadeiro"
+        class="bg-slate-900/90 backdrop-blur-md border border-slate-700 w-10 h-10 md:w-12 md:h-12 md:rounded-2xl rounded-full flex flex-col items-center justify-center shadow-xl cursor-default transition-all">
+        <span class="text-red-500 text-[9px] md:text-[10px] font-black -mb-1 z-10">N</span>
+        <svg viewBox="0 0 24 24" class="w-5 h-5 md:w-6 md:h-6 z-0 transition-transform duration-200 ease-out"
+          :style="{ transform: `rotate(${anguloBussola}deg)` }">
+          <polygon points="12,2 15,12 9,12" fill="#ef4444" />
+          <polygon points="12,22 15,12 9,12" fill="#94a3b8" />
+          <circle cx="12" cy="12" r="2.5" fill="#f8fafc" />
+        </svg>
+      </div>
+
     </nav>
   </main>
 </template>
@@ -512,6 +614,7 @@ onUnmounted(() => { if (mapInstance) { mapInstance.remove(); mapInstance = null;
     transform: rotate(360deg);
   }
 }
+
 .slide-up-enter-active,
 .slide-up-leave-active {
   transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
