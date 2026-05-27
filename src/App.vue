@@ -190,8 +190,6 @@ const HGBRASIL_KEY = '631a8bba';
 const urlHG = await fetch(`https://sky-radar-api-production.up.railway.app/api/weather/${lat}/${lng}`);
     
     let tempApi = '--';
-
-    let tempApi = '--';
     let chuvaApi = 0;
     let condicaoDesc = 'Buscando condições...';
     let iconSlug = 'cloudly_day';
