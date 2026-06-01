@@ -5,7 +5,8 @@ import 'leaflet/dist/leaflet.css'
 
 const mapElement = ref(null)
 let mapInstance = null, userMarker = null, markersLayer = null, dynamicMarkersLayer = null
-
+const isRadarActive = ref(false)
+let radarTileLayer = null
 const riskAreas = ref([]), activeFilter = ref('all'), selectedArea = ref(null)
 const searchQuery = ref(''), searchResults = ref([]), localRadarData = ref([])
 const anguloBussola = ref(0)
@@ -24,6 +25,72 @@ const criticalAlerts = computed(() => {
   return list.sort((a, b) => (peso[b.level] || 0) - (peso[a.level] || 0))
 })
 
+const toggleRadarLayer = () => {
+  isRadarActive.value = !isRadarActive.value
+
+  if (isRadarActive.value && mapInstance) {
+    // Adiciona a camada de precipitação do OpenWeather
+    // DICA DE SÉNIOR: Nunca exponha a chave no código. Use a variável de ambiente.
+    const owmKey = import.meta.env.VITE_OWM_KEY || 'd5e403cc1dc62d5c39e5d208a16f5388'
+
+    radarTileLayer = L.tileLayer(`https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=${owmKey}`, {
+      maxZoom: 19,
+      opacity: 0.7, // 70% para não tapar as ruas debaixo da chuva
+      attribution: '&copy; OpenWeather'
+    }).addTo(mapInstance)
+  } else {
+    // Remove a camada se for desativada
+    if (radarTileLayer && mapInstance) {
+      mapInstance.removeLayer(radarTileLayer)
+      radarTileLayer = null
+    }
+  }
+}
+// Função para procurar dados quando clica no mapa ou na barra de pesquisa
+const fetchAggregatedData = async (lat, lng) => {
+  try {
+    // 1. Chamamos a NOSSA API unificada
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+    const response = await fetch(`${apiUrl}/api/radar-data/${lat}/${lng}`);
+    const data = await response.json();
+
+    // 2. Mapeamos os dados devolvidos para preencher o painel lateral
+    // O OpenWeather devolve o volume de chuva da última hora dentro de uma chave '1h'
+    const volumeChuva = data.chuva_detalhada && data.chuva_detalhada['1h']
+      ? data.chuva_detalhada['1h']
+      : 0;
+
+    selectedArea.value = {
+      name: data.temperatura_base.city_name,
+      temp: data.temperatura_base.temp + '°C',
+      desc: data.temperatura_base.description,
+      iconSlug: data.temperatura_base.condition_slug,
+
+      // Combinamos o melhor das duas APIs
+      wind: data.vento && data.vento.speed ? `${data.vento.speed} m/s` : data.temperatura_base.wind_speedy,
+      rain: volumeChuva,
+
+      // Definimos a cor do alerta com base na chuva real!
+      level: calcularNivelRisco(volumeChuva)
+    };
+
+    // 3. Centralizar o mapa na coordenada clicada (opcional, mas melhora a experiência)
+    if (mapInstance) {
+      mapInstance.flyTo([lat, lng], 14, { duration: 1.5 });
+    }
+
+  } catch (error) {
+    console.error("Erro ao comunicar com a API Gateway:", error);
+  }
+};
+
+// Função simples para calcular o perigo de alagamento com base nos milímetros
+const calcularNivelRisco = (chuvaMm) => {
+  if (chuvaMm === 0) return 'normal';
+  if (chuvaMm > 0 && chuvaMm <= 10) return 'yellow';
+  if (chuvaMm > 10 && chuvaMm <= 30) return 'orange';
+  return 'red'; // Chuva forte, alto risco de problemas nas infraestruturas urbanas
+};
 const iniciarBussolaDinamica = () => {
   if (window.DeviceOrientationEvent) {
     window.addEventListener('deviceorientation', (e) => {
@@ -240,169 +307,223 @@ onUnmounted(() => { if (mapInstance) { mapInstance.remove(); mapInstance = null 
 </script>
 
 <template>
-  <main class="relative w-full h-screen overflow-hidden bg-slate-900 font-sans text-slate-100">
-    <section ref="mapElement" class="absolute inset-0 z-0"></section>
+  <main class="grid grid-cols-1 md:grid-cols-4 h-screen w-full overflow-hidden bg-slate-900 text-slate-100 font-sans">
 
-    <header class="absolute top-4 left-1/2 -translate-x-1/2 z-[2000] w-[92%] md:w-[28rem]">
-      <form @submit.prevent="buscarLocal" class="relative flex items-center w-full">
-        <input v-model="searchQuery" type="search" placeholder="Digite a cidade (ex: Recife)..."
-          class="w-full bg-slate-900/95 backdrop-blur-xl text-white px-5 py-3.5 pr-12 rounded-2xl border border-slate-700 shadow-2xl focus:outline-none focus:border-blue-500 transition-all text-sm placeholder-slate-500">
-        <button type="submit" class="absolute right-2 p-2 text-slate-400 hover:text-blue-400 transition-colors">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5"
-            stroke="currentColor" class="w-5 h-5">
+    <aside
+      class="col-span-1 flex flex-col h-full bg-slate-950 border-r border-slate-800 p-5 overflow-hidden z-10 shadow-2xl">
+
+      <header class="mb-5 shrink-0 flex justify-between items-center">
+        <div>
+          <h1 class="text-2xl font-black tracking-wider text-blue-500">🛰️ SKY<span class="text-white">RADAR</span></h1>
+          <p class="text-[10px] text-slate-500 uppercase font-bold tracking-widest mt-0.5">Centro de Comando</p>
+        </div>
+        <span class="animate-pulse flex h-3 w-3 rounded-full bg-green-500" title="Sistema Operacional"></span>
+      </header>
+
+      <form @submit.prevent="buscarLocal" class="relative w-full mb-6 shrink-0">
+        <input v-model="searchQuery" type="search" placeholder="Pesquisar cidade..."
+          class="w-full bg-slate-900 text-white px-4 py-3.5 pr-10 rounded-xl border border-slate-700 shadow-inner focus:outline-none focus:border-blue-500 transition-all text-sm placeholder-slate-500">
+        <button type="submit" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-blue-400">
+          <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
             <path stroke-linecap="round" stroke-linejoin="round"
               d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
           </svg>
         </button>
       </form>
-      <transition name="fade-slide">
-        <nav v-if="searchResults.length > 0"
-          class="absolute top-full left-0 w-full mt-2 bg-slate-900/95 backdrop-blur-xl border border-slate-700 rounded-2xl shadow-2xl overflow-hidden max-h-60 overflow-y-auto custom-scrollbar">
-          <ul>
-            <li @click="searchResults = []"
-              class="px-4 py-2 bg-slate-800 text-xs text-slate-400 text-right cursor-pointer hover:text-white">Fechar ✕
-            </li>
-            <li v-for="(result, index) in searchResults" :key="index" @click="selecionarLocal(result)"
-              class="px-5 py-3 hover:bg-slate-800 cursor-pointer border-b border-slate-800/50 last:border-0 flex flex-col group">
-              <span class="text-sm font-bold text-blue-400 group-hover:text-white truncate">{{
-                result.display_name.split(',')[0] }}</span>
-              <span class="text-[11px] text-slate-400 truncate mt-0.5">{{
-                result.display_name.split(',').slice(1).join(', ') }}</span>
-            </li>
-          </ul>
-        </nav>
-      </transition>
-    </header>
 
-    <transition name="slide-up">
-      <aside v-if="selectedArea"
-        :class="selectedArea.turn === 'dia' ? 'bg-gradient-to-br from-slate-800/95 to-slate-900/95' : 'bg-gradient-to-br from-slate-900/95 to-black/95'"
-        class="absolute z-[3000] bottom-0 left-0 w-full md:bottom-auto md:top-6 md:right-6 md:left-auto md:w-80 backdrop-blur-xl text-white p-6 pb-8 md:pb-6 rounded-t-3xl md:rounded-3xl shadow-[0_-20px_50px_rgba(0,0,0,0.5)] md:shadow-2xl border-t md:border border-slate-700 transition-colors duration-500">
-        <button @click="fecharCard"
-          class="absolute top-4 right-4 text-slate-400 hover:text-white bg-slate-800 rounded-full w-8 h-8 flex items-center justify-center z-10">✕</button>
-        <h3 class="text-2xl font-black tracking-tighter pr-8 truncate flex items-center gap-2">{{ selectedArea.name }}
-          <span class="text-xl filter drop-shadow-md">{{ selectedArea.turn === 'dia' ? '☀️' : '🌙' }}</span>
-        </h3>
+      <div v-if="selectedArea"
+        class="mb-6 p-4 rounded-2xl bg-slate-800/80 border border-slate-700 shadow-lg shrink-0 transition-all">
+        <div class="flex justify-between items-start mb-3">
+          <h3 class="text-lg font-black truncate pr-2">{{ selectedArea.name }}</h3>
+          <button @click="fecharCard"
+            class="text-slate-400 hover:text-white bg-slate-700/50 rounded-full w-6 h-6 flex items-center justify-center text-xs transition-colors">✕</button>
+        </div>
+
         <div
-          class="mt-2 inline-flex items-center gap-2 px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-widest border"
+          class="mb-4 inline-flex items-center gap-2 px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest border"
           :style="{ borderColor: alertColors[selectedArea.level], backgroundColor: alertColors[selectedArea.level] + '20', color: alertColors[selectedArea.level] }">
           <span class="w-2 h-2 rounded-full animate-pulse"
-            :style="{ backgroundColor: alertColors[selectedArea.level] }"></span>{{ nivelNomes[selectedArea.level] }}
+            :style="{ backgroundColor: alertColors[selectedArea.level] }"></span>
+          {{ nivelNomes[selectedArea.level] }}
         </div>
-        <article
-          class="flex justify-between items-center mt-6 p-4 bg-slate-800/60 rounded-2xl border border-slate-700/50 shadow-inner">
-          <div class="flex flex-col items-center w-1/3"><span class="text-2xl filter drop-shadow-md">🌡️</span><span
-              class="text-lg font-black mt-1">{{ selectedArea.temp ?? '--' }}<span
-                class="text-xs text-slate-400">°C</span></span><span
-              class="text-[9px] text-slate-500 uppercase font-bold tracking-widest mt-0.5">Temp</span></div>
-          <div class="w-px h-10 bg-slate-700"></div>
-          <div class="flex flex-col items-center w-1/3"><img v-if="selectedArea.iconSlug"
-              :src="'https://assets.hgbrasil.com/weather/icons/conditions/' + selectedArea.iconSlug + '.svg'"
-              class="w-8 h-8 filter drop-shadow-md object-contain" alt="clima" /><span v-else
-              class="text-2xl">☁️</span><span class="text-lg font-black mt-1 text-blue-400">{{ selectedArea.rain ?? '0'
-              }}<span class="text-xs text-slate-400">mm</span></span><span
-              class="text-[9px] text-slate-500 uppercase font-bold tracking-widest mt-0.5">Chuva</span></div>
-          <div class="w-px h-10 bg-slate-700"></div>
-          <div class="flex flex-col items-center w-1/3"><span class="text-2xl filter drop-shadow-md">💨</span><span
-              class="text-lg font-black mt-1 text-teal-400">{{ selectedArea.wind ? selectedArea.wind.replace(' km/h',
-                '') : '0' }}<span class="text-xs text-slate-400">km/h</span></span><span
-              class="text-[9px] text-slate-500 uppercase font-bold tracking-widest mt-0.5">Vento</span></div>
-        </article>
-        <p class="text-xs text-slate-300 mt-5 font-medium leading-relaxed bg-slate-800 p-4 rounded-xl border-l-4 shadow-md"
-          :style="{ borderColor: alertColors[selectedArea.level] }">{{ selectedArea.desc }}</p>
-      </aside>
-    </transition>
 
-    <aside
-      class="absolute z-[1000] bottom-0 left-0 w-full rounded-t-3xl border-t border-slate-700 bg-slate-900/95 backdrop-blur-md p-5 pb-6 md:pb-5 flex flex-col transition-all duration-300 shadow-[0_-10px_40px_rgba(0,0,0,0.3)] max-h-[40vh] md:max-h-[90vh] md:bottom-auto md:top-4 md:left-4 md:w-80 md:rounded-2xl md:border md:shadow-2xl">
-      <div class="w-12 h-1.5 bg-slate-600 rounded-full mx-auto mb-4 md:hidden shrink-0"></div>
-      <header class="flex items-center justify-between mb-4 shrink-0">
-        <h1 class="text-xl font-black tracking-wider text-blue-500">🛰️ SKY<span class="text-white">RADAR</span></h1>
-        <span class="animate-pulse flex h-3 w-3 rounded-full"
-          :class="criticalAlerts.length > 0 ? 'bg-green-500' : 'bg-slate-500'"></span>
-      </header>
-      <nav
-        class="flex gap-2 md:mb-6 mb-3 shrink-0 text-[10px] uppercase font-bold text-slate-400 overflow-x-auto custom-scrollbar pb-1">
-        <button @click="toggleFilter('all')" :class="activeFilter === 'all' ? 'text-white' : 'opacity-50'"
-          class="flex items-center gap-1 shrink-0 mr-2">
-          <div class="w-2 h-2 rounded-full bg-slate-400"></div> Todos
-        </button>
-        <button @click="toggleFilter('green')" :class="activeFilter === 'green' ? 'text-white' : 'opacity-50'"
-          class="flex items-center gap-1 shrink-0">
-          <div class="w-2 h-2 rounded-full bg-green-500"></div> Normal
-        </button>
-        <button @click="toggleFilter('yellow')" :class="activeFilter === 'yellow' ? 'text-white' : 'opacity-50'"
-          class="flex items-center gap-1 shrink-0">
-          <div class="w-2 h-2 rounded-full bg-yellow-400"></div> Atenção
-        </button>
-        <button @click="toggleFilter('orange')" :class="activeFilter === 'orange' ? 'text-white' : 'opacity-50'"
-          class="flex items-center gap-1 shrink-0">
-          <div class="w-2 h-2 rounded-full bg-orange-500"></div> Alerta
-        </button>
-        <button @click="toggleFilter('red')" :class="activeFilter === 'red' ? 'text-white' : 'opacity-50'"
-          class="flex items-center gap-1 shrink-0">
-          <div class="w-2 h-2 rounded-full bg-red-500"></div> Risco
-        </button>
-      </nav>
-      <hr class="border-slate-700 mb-3 md:mb-4 shrink-0">
-      <section class="flex-1 overflow-y-auto pr-1 space-y-3 custom-scrollbar">
-        <div v-if="criticalAlerts.length === 0" class="text-center py-4 text-slate-500 text-xs animate-pulse">Aguardando
-          varredura...</div>
-        <article v-for="alert in criticalAlerts" :key="alert.id" @click="focarNoAlerta(alert)"
-          class="p-4 rounded-xl border border-slate-700 bg-slate-800/50 hover:bg-slate-700 transition-colors cursor-pointer group">
-          <div class="flex items-center gap-2 mb-2">
-            <div class="w-2 h-2 rounded-full shadow-lg"
-              :style="{ backgroundColor: alertColors[alert.level], boxShadow: `0 0 8px ${alertColors[alert.level]}` }">
+        <div class="grid grid-cols-3 gap-2 text-center bg-slate-900/50 p-2 rounded-xl border border-slate-700/50">
+          <div class="flex flex-col items-center justify-center">
+            <span class="text-xl">🌡️</span>
+            <span class="font-bold mt-1 text-sm">{{ selectedArea.temp ?? '--' }}</span>
+            <span class="text-[9px] text-slate-500 uppercase font-bold tracking-widest mt-0.5">Temp</span>
+          </div>
+          <div class="flex flex-col items-center justify-center border-l border-r border-slate-700/50">
+            <img v-if="selectedArea.iconSlug"
+              :src="'https://assets.hgbrasil.com/weather/icons/conditions/' + selectedArea.iconSlug + '.svg'"
+              class="w-6 h-6 object-contain" />
+            <span v-else class="text-xl">☁️</span>
+            <span class="font-bold mt-1 text-sm text-blue-400">{{ selectedArea.rain ?? '0' }}<span
+                class="text-[10px] text-slate-400">mm</span></span>
+            <span class="text-[9px] text-slate-500 uppercase font-bold tracking-widest mt-0.5">Chuva</span>
+          </div>
+          <div class="flex flex-col items-center justify-center">
+            <span class="text-xl">💨</span>
+            <span class="font-bold mt-1 text-sm text-teal-400">{{ selectedArea.wind ? selectedArea.wind.replace(' km/h',
+              '') : '0' }}</span>
+            <span class="text-[9px] text-slate-500 uppercase font-bold tracking-widest mt-0.5">Vento</span>
+          </div>
+        </div>
+
+        <p class="text-xs text-slate-300 mt-3 p-3 bg-slate-900/50 rounded-lg border-l-2 shadow-inner"
+          :style="{ borderColor: alertColors[selectedArea.level] }">
+          {{ selectedArea.desc }}
+        </p>
+      </div>
+
+      <div v-else
+        class="mb-6 p-5 rounded-2xl bg-slate-800/30 border border-slate-700/50 border-dashed text-center shrink-0 flex flex-col items-center justify-center">
+        <span class="text-3xl mb-3 block opacity-40">🗺️</span>
+        <p class="text-xs text-slate-400 leading-relaxed">Selecione um ponto no mapa do Recife para inspecionar os dados
+          de risco e precipitação.</p>
+      </div>
+
+      <section class="flex-1 overflow-y-auto custom-scrollbar pr-1">
+        <div
+          class="flex items-center justify-between border-b border-slate-800 pb-2 mb-3 sticky top-0 bg-slate-950 z-10">
+          <span class="text-xs font-bold text-slate-400 uppercase tracking-widest">Sensores & Alertas</span>
+
+          <div class="flex gap-1.5 bg-slate-900 p-1 rounded-full border border-slate-800">
+            <button @click="toggleFilter('all')"
+              :class="activeFilter === 'all' ? 'opacity-100 ring-2 ring-white/50 scale-110' : 'opacity-30 hover:opacity-60'"
+              class="w-3 h-3 rounded-full bg-slate-400 transition-all" title="Todos"></button>
+            <button @click="toggleFilter('yellow')"
+              :class="activeFilter === 'yellow' ? 'opacity-100 ring-2 ring-white/50 scale-110' : 'opacity-30 hover:opacity-60'"
+              class="w-3 h-3 rounded-full bg-yellow-400 transition-all" title="Atenção"></button>
+            <button @click="toggleFilter('orange')"
+              :class="activeFilter === 'orange' ? 'opacity-100 ring-2 ring-white/50 scale-110' : 'opacity-30 hover:opacity-60'"
+              class="w-3 h-3 rounded-full bg-orange-500 transition-all" title="Alerta"></button>
+            <button @click="toggleFilter('red')"
+              :class="activeFilter === 'red' ? 'opacity-100 ring-2 ring-white/50 scale-110' : 'opacity-30 hover:opacity-60'"
+              class="w-3 h-3 rounded-full bg-red-500 transition-all" title="Risco"></button>
+          </div>
+        </div>
+
+        <div v-if="criticalAlerts.length === 0" class="text-center py-6 text-slate-500 text-xs animate-pulse">A aguardar
+          varredura dos pluviómetros...</div>
+
+        <div class="space-y-2 pb-4">
+          <article v-for="alert in criticalAlerts" :key="alert.id" @click="focarNoAlerta(alert)"
+            class="p-3 rounded-xl border border-slate-700/60 bg-slate-800/40 hover:bg-slate-700/80 transition-all cursor-pointer group flex flex-col gap-1.5 shadow-sm hover:shadow-md">
+            <div class="flex items-center gap-2">
+              <div class="w-2.5 h-2.5 rounded-full shadow-lg shrink-0"
+                :style="{ backgroundColor: alertColors[alert.level], boxShadow: `0 0 8px ${alertColors[alert.level]}` }">
+              </div>
+              <p class="text-[13px] font-black truncate text-slate-200 group-hover:text-white">{{ alert.name }}</p>
             </div>
-            <p class="text-sm font-black truncate w-[85%]">{{ alert.name }}</p>
-          </div>
-          <div class="flex justify-between items-end pl-4">
-            <p class="text-[10px] text-slate-400 uppercase tracking-widest font-bold">Chuva: <span
-                class="text-blue-400">{{ alert.rain }}mm</span></p><span
-              class="text-[10px] text-slate-500 group-hover:text-white transition-colors">VER NO MAPA ➔</span>
-          </div>
-        </article>
+            <div class="flex justify-between items-center pl-4.5">
+              <p class="text-[10px] text-slate-400 uppercase tracking-widest font-bold">Chuva: <span
+                  class="text-blue-400">{{ alert.rain }}mm</span></p>
+              <span
+                class="text-[9px] font-bold text-slate-500 group-hover:text-blue-400 transition-colors uppercase tracking-wider">Ver
+                no Mapa ➔</span>
+            </div>
+          </article>
+        </div>
       </section>
+
     </aside>
 
-    <nav
-      class="absolute z-[1500] top-24 right-4 flex flex-col items-center gap-3 md:top-auto md:bottom-6 md:left-1/2 md:-translate-x-1/2 md:right-auto md:flex-row">
-      <button @click="locateUser"
-        class="bg-blue-600/90 backdrop-blur-md text-white w-10 h-10 md:w-auto md:px-6 md:py-3 rounded-full md:rounded-2xl border border-blue-500 shadow-xl hover:bg-blue-700 transition-all flex items-center justify-center gap-2"
-        title="Onde Estou?"><span class="text-lg md:text-base">🎯</span><span
-          class="hidden md:inline font-black text-xs uppercase tracking-widest">Onde Estou?</span></button>
-      <button @click="resetView"
-        class="bg-slate-900/90 backdrop-blur-md text-white w-10 h-10 md:w-auto md:px-6 md:py-3 rounded-full md:rounded-2xl border border-slate-700 shadow-xl hover:bg-slate-800 transition-all flex items-center justify-center gap-2"
-        title="Visão Geral"><span class="text-lg md:text-base">📍</span><span
-          class="hidden md:inline font-black text-xs uppercase tracking-widest">Visão Geral</span></button>
-     <div title="Norte Verdadeiro"
-  class="bg-slate-900/90 backdrop-blur-md border border-slate-700 w-16 h-16 rounded-full flex items-center justify-center shadow-2xl cursor-default transition-all relative overflow-hidden ring-2 ring-slate-700">
-  
-  <svg viewBox="0 0 100 100" class="absolute w-full h-full p-1 opacity-90">
-    <path d="M50 5 L53 50 L50 95 L47 50 Z" fill="#475569" /> <path d="M5 50 L50 47 L95 50 L50 53 Z" fill="#475569" /> <path d="M20 20 L50 48 L80 80 L50 52 Z" fill="#475569" /> <path d="M80 20 L50 48 L20 80 L50 52 Z" fill="#475569" /> <path d="M50 5 L51 50 L50 95 L49 50 Z" fill="#334155" />
-    <path d="M5 50 L50 49 L95 50 L50 51 Z" fill="#334155" />
-    <path d="M20 20 L50 49 L80 80 L50 51 Z" fill="#334155" />
-    <path d="M80 20 L50 49 L20 80 L50 51 Z" fill="#334155" />
+    <section class="col-span-1 md:col-span-3 relative h-full w-full bg-slate-800">
 
-    <circle cx="50" cy="50" r="10" fill="#1e293b" stroke="#eab308" stroke-width="1.2" />
+      <div ref="mapElement" class="absolute inset-0 z-0"></div>
 
-    <text x="50" y="10" text-anchor="middle" font-size="9" fill="white" stroke="black" stroke-width="0.3" font-weight="bold">N</text>
-    <text x="50" y="98" text-anchor="middle" font-size="9" fill="white" stroke="black" stroke-width="0.3" font-weight="bold">S</text>
-    <text x="2" y="53" text-anchor="start" font-size="9" fill="white" stroke="black" stroke-width="0.3" font-weight="bold">O</text>
-    <text x="98" y="53" text-anchor="end" font-size="9" fill="white" stroke="black" stroke-width="0.3" font-weight="bold">L</text>
-    
-    <text x="80" y="22" text-anchor="end" font-size="6" fill="#f8fafc" stroke="black" stroke-width="0.1">NE</text>
-    <text x="20" y="22" text-anchor="start" font-size="6" fill="#f8fafc" stroke="black" stroke-width="0.1">NO</text>
-    <text x="80" y="85" text-anchor="end" font-size="6" fill="#f8fafc" stroke="black" stroke-width="0.1">SE</text>
-    <text x="20" y="85" text-anchor="start" font-size="6" fill="#f8fafc" stroke="black" stroke-width="0.1">SO</text>
-  </svg>
+      <nav class="absolute z-[1500] bottom-6 right-6 flex flex-col items-center gap-3">
 
-  <svg viewBox="0 0 24 24" class="w-10 h-10 z-10 transition-transform duration-200 ease-out drop-shadow-xl"
-    :style="{ transform: `rotate(${anguloBussola}deg)` }">
-    <path d="M12 2L14 12L12 22L10 12L12 2Z" fill="#eab308" /> <path d="M12 2L12 12L10 12Z" fill="#ca8a04" /> <circle cx="12" cy="12" r="1.5" fill="white" stroke="#eab308" stroke-width="0.5" />
-  </svg>
-</div>
-    </nav>
+        <button @click="toggleRadarLayer"
+          :class="isRadarActive ? 'bg-purple-600 border-purple-400' : 'bg-slate-900/90 border-slate-700'"
+          class="backdrop-blur-md text-white w-12 h-12 rounded-full border shadow-xl hover:bg-purple-700 transition-all flex items-center justify-center relative group"
+          title="Radar de Precipitação">
+
+          <span class="text-xl relative z-10">🌧️</span>
+          <span v-if="isRadarActive"
+            class="absolute inset-0 rounded-full border-2 border-purple-400 animate-ping opacity-75"></span>
+
+          <span
+            class="absolute right-14 bg-slate-900 text-[10px] font-bold uppercase px-2 py-1 rounded border border-slate-700 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+            {{ isRadarActive ? 'Desativar Radar' : 'Ativar Radar de Chuva' }}
+          </span>
+        </button>
+
+        <button @click="locateUser"
+          class="bg-blue-600/90 backdrop-blur-md text-white w-12 h-12 rounded-full border border-blue-500 shadow-xl hover:bg-blue-700 transition-all flex items-center justify-center"
+          title="A Minha Localização">
+          <span class="text-xl">🎯</span>
+        </button>
+        <div title="Norte Verdadeiro"
+          class="bg-slate-900/90 backdrop-blur-md border border-slate-700 w-20 h-20 rounded-full flex items-center justify-center shadow-2xl transition-all relative overflow-hidden ring-2 ring-slate-900/50 shrink-0">
+
+          <svg viewBox="0 0 120 120" class="absolute inset-0 w-full h-full p-1.5">
+            <defs>
+              <g id="sub">
+                <polygon points="60,25 62.5,60 60,60" fill="#475569" />
+                <polygon points="60,25 57.5,60 60,60" fill="#64748b" />
+              </g>
+              <g id="col">
+                <polygon points="60,18 64,60 60,60" fill="#a16207" />
+                <polygon points="60,18 56,60 60,60" fill="#eab308" />
+              </g>
+              <g id="car">
+                <polygon points="60,10 66,60 60,60" fill="#ca8a04" />
+                <polygon points="60,10 54,60 60,60" fill="#fef08a" />
+              </g>
+            </defs>
+
+            <use href="#sub" transform="rotate(22.5 60 60)" />
+            <use href="#sub" transform="rotate(67.5 60 60)" />
+            <use href="#sub" transform="rotate(112.5 60 60)" />
+            <use href="#sub" transform="rotate(157.5 60 60)" />
+            <use href="#sub" transform="rotate(202.5 60 60)" />
+            <use href="#sub" transform="rotate(247.5 60 60)" />
+            <use href="#sub" transform="rotate(292.5 60 60)" />
+            <use href="#sub" transform="rotate(337.5 60 60)" />
+
+            <use href="#col" transform="rotate(45 60 60)" />
+            <use href="#col" transform="rotate(135 60 60)" />
+            <use href="#col" transform="rotate(225 60 60)" />
+            <use href="#col" transform="rotate(315 60 60)" />
+
+            <use href="#car" transform="rotate(90 60 60)" />
+            <use href="#car" transform="rotate(180 60 60)" />
+            <use href="#car" transform="rotate(270 60 60)" />
+
+            <polygon points="60,10 66,60 60,60" fill="#991b1b" />
+            <polygon points="60,10 54,60 60,60" fill="#ef4444" />
+
+            <circle cx="60" cy="60" r="14" fill="#0f172a" stroke="#ca8a04" stroke-width="1.5" />
+
+            <text x="60" y="8" text-anchor="middle" font-size="8" fill="#ef4444" font-weight="900"
+              style="text-shadow: 0 1px 2px black;">N</text>
+            <text x="60" y="117" text-anchor="middle" font-size="7" fill="#cbd5e1" font-weight="bold">S</text>
+            <text x="5" y="62.5" text-anchor="middle" font-size="7" fill="#cbd5e1" font-weight="bold">O</text>
+            <text x="115" y="62.5" text-anchor="middle" font-size="7" fill="#cbd5e1" font-weight="bold">L</text>
+
+            <text x="97" y="27" text-anchor="middle" font-size="5.5" fill="#94a3b8" font-weight="bold">NE</text>
+            <text x="97" y="99" text-anchor="middle" font-size="5.5" fill="#94a3b8" font-weight="bold">SE</text>
+            <text x="23" y="99" text-anchor="middle" font-size="5.5" fill="#94a3b8" font-weight="bold">SO</text>
+            <text x="23" y="27" text-anchor="middle" font-size="5.5" fill="#94a3b8" font-weight="bold">NO</text>
+          </svg>
+
+          <svg viewBox="0 0 120 120"
+            class="absolute inset-0 w-full h-full z-10 transition-transform duration-200 ease-out drop-shadow-2xl"
+            :style="{ transform: `rotate(${anguloBussola}deg)` }">
+            <polygon points="60,22 63,60 57,60" fill="#ef4444" />
+            <polygon points="60,98 63,60 57,60" fill="#f8fafc" />
+            <circle cx="60" cy="60" r="3" fill="#0f172a" stroke="#ef4444" stroke-width="1.5" />
+          </svg>
+
+        </div>
+
+
+      </nav>
+
+    </section>
+
   </main>
 </template>
 
