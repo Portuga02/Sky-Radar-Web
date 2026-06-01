@@ -54,12 +54,26 @@ const fetchAggregatedData = async (lat, lng) => {
     const response = await fetch(`${apiUrl}/api/radar-data/${lat}/${lng}`);
     const data = await response.json();
 
-    // 2. Mapeamos os dados devolvidos para preencher o painel lateral
-    // O OpenWeather devolve o volume de chuva da última hora dentro de uma chave '1h'
-    const volumeChuva = data.chuva_detalhada && data.chuva_detalhada['1h']
-      ? data.chuva_detalhada['1h']
-      : 0;
+    // 2. Extração Inteligente do Volume de Chuva (Fallback Múltiplo)
+    let volumeChuva = 0;
 
+    // Tenta pegar a chuva de 1 hora do OpenWeather
+    if (data.chuva_detalhada && data.chuva_detalhada['1h']) {
+        volumeChuva = data.chuva_detalhada['1h'];
+    } 
+    // Se não tiver de 1h, tenta pegar a de 3 horas e faz a média
+    else if (data.chuva_detalhada && data.chuva_detalhada['3h']) {
+        volumeChuva = +(data.chuva_detalhada['3h'] / 3).toFixed(2);
+    } 
+    // Se o OpenWeather falhar, pede socorro à HG Brasil
+    else if (data.temperatura_base && data.temperatura_base.rain) {
+        volumeChuva = data.temperatura_base.rain;
+    }
+
+    // Console para depuração: veja no F12 exatamente o que a API respondeu
+    console.log(`🌧️ Auditoria Chuva [${lat}, ${lng}]:`, data);
+
+    // 3. Atualizamos o painel lateral com o volume extraído
     selectedArea.value = {
       name: data.temperatura_base.city_name,
       temp: data.temperatura_base.temp + '°C',
@@ -70,11 +84,11 @@ const fetchAggregatedData = async (lat, lng) => {
       wind: data.vento && data.vento.speed ? `${data.vento.speed} m/s` : data.temperatura_base.wind_speedy,
       rain: volumeChuva,
 
-      // Definimos a cor do alerta com base na chuva real!
+      // Definimos a cor do alerta com base na chuva real
       level: calcularNivelRisco(volumeChuva)
     };
 
-    // 3. Centralizar o mapa na coordenada clicada (opcional, mas melhora a experiência)
+    // 4. Centralizar o mapa na coordenada clicada
     if (mapInstance) {
       mapInstance.flyTo([lat, lng], 14, { duration: 1.5 });
     }
