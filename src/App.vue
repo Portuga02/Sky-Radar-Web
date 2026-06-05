@@ -59,15 +59,15 @@ const fetchAggregatedData = async (lat, lng) => {
 
     // Tenta pegar a chuva de 1 hora do OpenWeather
     if (data.chuva_detalhada && data.chuva_detalhada['1h']) {
-        volumeChuva = data.chuva_detalhada['1h'];
-    } 
+      volumeChuva = data.chuva_detalhada['1h'];
+    }
     // Se não tiver de 1h, tenta pegar a de 3 horas e faz a média
     else if (data.chuva_detalhada && data.chuva_detalhada['3h']) {
-        volumeChuva = +(data.chuva_detalhada['3h'] / 3).toFixed(2);
-    } 
+      volumeChuva = +(data.chuva_detalhada['3h'] / 3).toFixed(2);
+    }
     // Se o OpenWeather falhar, pede socorro à HG Brasil
     else if (data.temperatura_base && data.temperatura_base.rain) {
-        volumeChuva = data.temperatura_base.rain;
+      volumeChuva = data.temperatura_base.rain;
     }
 
     // Console para depuração: veja no F12 exatamente o que a API respondeu
@@ -319,14 +319,14 @@ onMounted(async () => {
 
 onUnmounted(() => { if (mapInstance) { mapInstance.remove(); mapInstance = null } })
 </script>
-
 <template>
-  <main class="grid grid-cols-1 md:grid-cols-4 h-screen w-full overflow-hidden bg-slate-900 text-slate-100 font-sans">
+  <main
+    class="flex flex-col-reverse md:grid md:grid-cols-4 h-[100dvh] w-full overflow-hidden bg-slate-900 text-slate-100 font-sans">
 
     <aside
-      class="col-span-1 flex flex-col h-full bg-slate-950 border-r border-slate-800 p-5 overflow-hidden z-10 shadow-2xl">
+      class="h-[45%] md:h-full md:col-span-1 flex flex-col bg-slate-950 border-t md:border-t-0 md:border-r border-slate-800 p-3 md:p-5 overflow-hidden z-[2000] shadow-[0_-4px_25px_-5px_rgba(0,0,0,0.5)] md:shadow-2xl">
 
-      <header class="mb-5 shrink-0 flex justify-between items-center">
+      <header class="mb-4 shrink-0 flex justify-between items-center">
         <div>
           <h1 class="text-2xl font-black tracking-wider text-blue-500">🛰️ SKY<span class="text-white">RADAR</span></h1>
           <p class="text-[10px] text-slate-500 uppercase font-bold tracking-widest mt-0.5">Centro de Comando</p>
@@ -334,8 +334,8 @@ onUnmounted(() => { if (mapInstance) { mapInstance.remove(); mapInstance = null 
         <span class="animate-pulse flex h-3 w-3 rounded-full bg-green-500" title="Sistema Operacional"></span>
       </header>
 
-      <form @submit.prevent="buscarLocal" class="relative w-full mb-6 shrink-0">
-        <input v-model="searchQuery" type="search" placeholder="Pesquisar cidade..."
+      <form @submit.prevent="buscarLocal" class="relative w-full mb-4 shrink-0 z-[3000]">
+        <input v-model="searchQuery" type="search" placeholder="Pesquisar cidade, bairro..."
           class="w-full bg-slate-900 text-white px-4 py-3.5 pr-10 rounded-xl border border-slate-700 shadow-inner focus:outline-none focus:border-blue-500 transition-all text-sm placeholder-slate-500">
         <button type="submit" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-blue-400">
           <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
@@ -343,107 +343,124 @@ onUnmounted(() => { if (mapInstance) { mapInstance.remove(); mapInstance = null 
               d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
           </svg>
         </button>
+
+        <ul v-if="searchResults.length > 0" 
+            class="absolute left-0 right-0 top-full mt-2 bg-slate-800 border border-slate-600 rounded-xl shadow-2xl max-h-60 overflow-y-auto custom-scrollbar overflow-hidden">
+          <li v-for="resultado in searchResults" :key="resultado.place_id" 
+              @click="selecionarLocal(resultado)"
+              class="p-3 border-b border-slate-700/50 hover:bg-slate-700 cursor-pointer transition-colors flex flex-col gap-0.5 last:border-0">
+            <span class="text-sm font-bold text-slate-200">
+              {{ resultado.display_name.split(',')[0] }}
+            </span>
+            <span class="text-xs text-slate-400 truncate">
+              {{ resultado.display_name.split(',').slice(1, 3).join(',') }}
+            </span>
+          </li>
+        </ul>
       </form>
 
-      <div v-if="selectedArea"
-        class="mb-6 p-4 rounded-2xl bg-slate-800/80 border border-slate-700 shadow-lg shrink-0 transition-all">
-        <div class="flex justify-between items-start mb-3">
-          <h3 class="text-lg font-black truncate pr-2">{{ selectedArea.name }}</h3>
-          <button @click="fecharCard"
-            class="text-slate-400 hover:text-white bg-slate-700/50 rounded-full w-6 h-6 flex items-center justify-center text-xs transition-colors">✕</button>
+      <div class="flex-1 overflow-y-auto custom-scrollbar pr-2 flex flex-col">
+        
+        <div v-if="selectedArea"
+          class="mb-6 p-4 rounded-2xl bg-slate-800/80 border border-slate-700 shadow-lg shrink-0 transition-all">
+          <div class="flex justify-between items-start mb-3">
+            <h3 class="text-lg font-black truncate pr-2">{{ selectedArea.name }}</h3>
+            <button @click="fecharCard"
+              class="text-slate-400 hover:text-white bg-slate-700/50 rounded-full w-6 h-6 flex items-center justify-center text-xs transition-colors">✕</button>
+          </div>
+
+          <div
+            class="mb-4 inline-flex items-center gap-2 px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest border"
+            :style="{ borderColor: alertColors[selectedArea.level], backgroundColor: alertColors[selectedArea.level] + '20', color: alertColors[selectedArea.level] }">
+            <span class="w-2 h-2 rounded-full animate-pulse"
+              :style="{ backgroundColor: alertColors[selectedArea.level] }"></span>
+            {{ nivelNomes[selectedArea.level] }}
+          </div>
+
+          <div class="grid grid-cols-3 gap-2 text-center bg-slate-900/50 p-2 rounded-xl border border-slate-700/50">
+            <div class="flex flex-col items-center justify-center">
+              <span class="text-xl">🌡️</span>
+              <span class="font-bold mt-1 text-sm">{{ selectedArea.temp ?? '--' }}</span>
+              <span class="text-[9px] text-slate-500 uppercase font-bold tracking-widest mt-0.5">Temp</span>
+            </div>
+            <div class="flex flex-col items-center justify-center border-l border-r border-slate-700/50">
+              <img v-if="selectedArea.iconSlug"
+                :src="'https://assets.hgbrasil.com/weather/icons/conditions/' + selectedArea.iconSlug + '.svg'"
+                class="w-6 h-6 object-contain" />
+              <span v-else class="text-xl">☁️</span>
+              <span class="font-bold mt-1 text-sm text-blue-400">{{ selectedArea.rain ?? '0' }}<span
+                  class="text-[10px] text-slate-400">mm</span></span>
+              <span class="text-[9px] text-slate-500 uppercase font-bold tracking-widest mt-0.5">Chuva</span>
+            </div>
+            <div class="flex flex-col items-center justify-center">
+              <span class="text-xl">💨</span>
+              <span class="font-bold mt-1 text-sm text-teal-400">{{ selectedArea.wind ? selectedArea.wind.replace(' km/h',
+                '') : '0' }}</span>
+              <span class="text-[9px] text-slate-500 uppercase font-bold tracking-widest mt-0.5">Vento</span>
+            </div>
+          </div>
+
+          <p class="text-xs text-slate-300 mt-3 p-3 bg-slate-900/50 rounded-lg border-l-2 shadow-inner"
+            :style="{ borderColor: alertColors[selectedArea.level] }">
+            {{ selectedArea.desc }}
+          </p>
         </div>
 
-        <div
-          class="mb-4 inline-flex items-center gap-2 px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest border"
-          :style="{ borderColor: alertColors[selectedArea.level], backgroundColor: alertColors[selectedArea.level] + '20', color: alertColors[selectedArea.level] }">
-          <span class="w-2 h-2 rounded-full animate-pulse"
-            :style="{ backgroundColor: alertColors[selectedArea.level] }"></span>
-          {{ nivelNomes[selectedArea.level] }}
+        <div v-else
+          class="mb-6 p-5 rounded-2xl bg-slate-800/30 border border-slate-700/50 border-dashed text-center shrink-0 flex flex-col items-center justify-center">
+          <span class="text-3xl mb-3 block opacity-40">🗺️</span>
+          <p class="text-xs text-slate-400 leading-relaxed">Selecione um ponto no mapa do Recife para inspecionar os dados
+            de risco e precipitação.</p>
         </div>
 
-        <div class="grid grid-cols-3 gap-2 text-center bg-slate-900/50 p-2 rounded-xl border border-slate-700/50">
-          <div class="flex flex-col items-center justify-center">
-            <span class="text-xl">🌡️</span>
-            <span class="font-bold mt-1 text-sm">{{ selectedArea.temp ?? '--' }}</span>
-            <span class="text-[9px] text-slate-500 uppercase font-bold tracking-widest mt-0.5">Temp</span>
+        <section class="shrink-0 flex flex-col pb-4">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-2 mb-3 sticky top-0 bg-slate-950 z-10">
+            <span class="text-xs font-bold text-slate-400 uppercase tracking-widest">Sensores & Alertas</span>
+
+            <div class="flex gap-1.5 bg-slate-900 p-1 rounded-full border border-slate-800">
+              <button @click="toggleFilter('all')"
+                :class="activeFilter === 'all' ? 'opacity-100 ring-2 ring-white/50 scale-110' : 'opacity-30 hover:opacity-60'"
+                class="w-3 h-3 rounded-full bg-slate-400 transition-all" title="Todos"></button>
+              <button @click="toggleFilter('yellow')"
+                :class="activeFilter === 'yellow' ? 'opacity-100 ring-2 ring-white/50 scale-110' : 'opacity-30 hover:opacity-60'"
+                class="w-3 h-3 rounded-full bg-yellow-400 transition-all" title="Atenção"></button>
+              <button @click="toggleFilter('orange')"
+                :class="activeFilter === 'orange' ? 'opacity-100 ring-2 ring-white/50 scale-110' : 'opacity-30 hover:opacity-60'"
+                class="w-3 h-3 rounded-full bg-orange-500 transition-all" title="Alerta"></button>
+              <button @click="toggleFilter('red')"
+                :class="activeFilter === 'red' ? 'opacity-100 ring-2 ring-white/50 scale-110' : 'opacity-30 hover:opacity-60'"
+                class="w-3 h-3 rounded-full bg-red-500 transition-all" title="Risco"></button>
+            </div>
           </div>
-          <div class="flex flex-col items-center justify-center border-l border-r border-slate-700/50">
-            <img v-if="selectedArea.iconSlug"
-              :src="'https://assets.hgbrasil.com/weather/icons/conditions/' + selectedArea.iconSlug + '.svg'"
-              class="w-6 h-6 object-contain" />
-            <span v-else class="text-xl">☁️</span>
-            <span class="font-bold mt-1 text-sm text-blue-400">{{ selectedArea.rain ?? '0' }}<span
-                class="text-[10px] text-slate-400">mm</span></span>
-            <span class="text-[9px] text-slate-500 uppercase font-bold tracking-widest mt-0.5">Chuva</span>
+
+          <div v-if="criticalAlerts.length === 0" class="text-center py-6 text-slate-500 text-xs animate-pulse">
+            A aguardar varredura dos pluviómetros...
           </div>
-          <div class="flex flex-col items-center justify-center">
-            <span class="text-xl">💨</span>
-            <span class="font-bold mt-1 text-sm text-teal-400">{{ selectedArea.wind ? selectedArea.wind.replace(' km/h',
-              '') : '0' }}</span>
-            <span class="text-[9px] text-slate-500 uppercase font-bold tracking-widest mt-0.5">Vento</span>
-          </div>
-        </div>
 
-        <p class="text-xs text-slate-300 mt-3 p-3 bg-slate-900/50 rounded-lg border-l-2 shadow-inner"
-          :style="{ borderColor: alertColors[selectedArea.level] }">
-          {{ selectedArea.desc }}
-        </p>
-      </div>
-
-      <div v-else
-        class="mb-6 p-5 rounded-2xl bg-slate-800/30 border border-slate-700/50 border-dashed text-center shrink-0 flex flex-col items-center justify-center">
-        <span class="text-3xl mb-3 block opacity-40">🗺️</span>
-        <p class="text-xs text-slate-400 leading-relaxed">Selecione um ponto no mapa do Recife para inspecionar os dados
-          de risco e precipitação.</p>
-      </div>
-
-      <section class="flex-1 overflow-y-auto custom-scrollbar pr-1">
-        <div
-          class="flex items-center justify-between border-b border-slate-800 pb-2 mb-3 sticky top-0 bg-slate-950 z-10">
-          <span class="text-xs font-bold text-slate-400 uppercase tracking-widest">Sensores & Alertas</span>
-
-          <div class="flex gap-1.5 bg-slate-900 p-1 rounded-full border border-slate-800">
-            <button @click="toggleFilter('all')"
-              :class="activeFilter === 'all' ? 'opacity-100 ring-2 ring-white/50 scale-110' : 'opacity-30 hover:opacity-60'"
-              class="w-3 h-3 rounded-full bg-slate-400 transition-all" title="Todos"></button>
-            <button @click="toggleFilter('yellow')"
-              :class="activeFilter === 'yellow' ? 'opacity-100 ring-2 ring-white/50 scale-110' : 'opacity-30 hover:opacity-60'"
-              class="w-3 h-3 rounded-full bg-yellow-400 transition-all" title="Atenção"></button>
-            <button @click="toggleFilter('orange')"
-              :class="activeFilter === 'orange' ? 'opacity-100 ring-2 ring-white/50 scale-110' : 'opacity-30 hover:opacity-60'"
-              class="w-3 h-3 rounded-full bg-orange-500 transition-all" title="Alerta"></button>
-            <button @click="toggleFilter('red')"
-              :class="activeFilter === 'red' ? 'opacity-100 ring-2 ring-white/50 scale-110' : 'opacity-30 hover:opacity-60'"
-              class="w-3 h-3 rounded-full bg-red-500 transition-all" title="Risco"></button>
-          </div>
-        </div>
-
-        <div v-if="criticalAlerts.length === 0" class="text-center py-6 text-slate-500 text-xs animate-pulse">A aguardar
-          varredura dos pluviómetros...</div>
-
-        <div class="space-y-2 pb-4">
-          <article v-for="alert in criticalAlerts" :key="alert.id" @click="focarNoAlerta(alert)"
-            class="p-3 rounded-xl border border-slate-700/60 bg-slate-800/40 hover:bg-slate-700/80 transition-all cursor-pointer group flex flex-col gap-1.5 shadow-sm hover:shadow-md">
-            <div class="flex items-center gap-2">
-              <div class="w-2.5 h-2.5 rounded-full shadow-lg shrink-0"
-                :style="{ backgroundColor: alertColors[alert.level], boxShadow: `0 0 8px ${alertColors[alert.level]}` }">
+          <div class="space-y-2">
+            <article v-for="alert in criticalAlerts" :key="alert.id" @click="focarNoAlerta(alert)"
+              class="p-3 rounded-xl border border-slate-700/60 bg-slate-800/40 hover:bg-slate-700/80 transition-all cursor-pointer group flex flex-col gap-1.5 shadow-sm hover:shadow-md">
+              <div class="flex items-center gap-2">
+                <div class="w-2.5 h-2.5 rounded-full shadow-lg shrink-0"
+                  :style="{ backgroundColor: alertColors[alert.level], boxShadow: `0 0 8px ${alertColors[alert.level]}` }">
+                </div>
+                <p class="text-[13px] font-black truncate text-slate-200 group-hover:text-white">{{ alert.name }}</p>
               </div>
-              <p class="text-[13px] font-black truncate text-slate-200 group-hover:text-white">{{ alert.name }}</p>
-            </div>
-            <div class="flex justify-between items-center pl-4.5">
-              <p class="text-[10px] text-slate-400 uppercase tracking-widest font-bold">Chuva: <span
-                  class="text-blue-400">{{ alert.rain }}mm</span></p>
-              <span
-                class="text-[9px] font-bold text-slate-500 group-hover:text-blue-400 transition-colors uppercase tracking-wider">Ver
-                no Mapa ➔</span>
-            </div>
-          </article>
-        </div>
-      </section>
+              <div class="flex justify-between items-center pl-4.5">
+                <p class="text-[10px] text-slate-400 uppercase tracking-widest font-bold">Chuva: <span
+                    class="text-blue-400">{{ alert.rain }}mm</span></p>
+                <span
+                  class="text-[9px] font-bold text-slate-500 group-hover:text-blue-400 transition-colors uppercase tracking-wider">Ver
+                  no Mapa ➔</span>
+              </div>
+            </article>
+          </div>
+        </section>
+      </div>
 
     </aside>
 
-    <section class="col-span-1 md:col-span-3 relative h-full w-full bg-slate-800">
+    <section class="h-[55%] md:h-full md:col-span-3 relative w-full bg-slate-800 z-0">
 
       <div ref="mapElement" class="absolute inset-0 z-0"></div>
 
@@ -469,6 +486,7 @@ onUnmounted(() => { if (mapInstance) { mapInstance.remove(); mapInstance = null 
           title="A Minha Localização">
           <span class="text-xl">🎯</span>
         </button>
+        
         <div title="Norte Verdadeiro"
           class="bg-slate-900/90 backdrop-blur-md border border-slate-700 w-20 h-20 rounded-full flex items-center justify-center shadow-2xl transition-all relative overflow-hidden ring-2 ring-slate-900/50 shrink-0">
 
@@ -532,7 +550,6 @@ onUnmounted(() => { if (mapInstance) { mapInstance.remove(); mapInstance = null 
           </svg>
 
         </div>
-
 
       </nav>
 
