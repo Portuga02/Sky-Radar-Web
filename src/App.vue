@@ -464,8 +464,7 @@ onUnmounted(() => { if (mapInstance) { mapInstance.remove(); mapInstance = null 
 
       <div ref="mapElement" class="absolute inset-0 z-0"></div>
 
-      <nav class="absolute z-[1500] bottom-6 right-6 flex flex-col items-center gap-3">
-
+      <nav class="absolute z-[1500] bottom-28 right-6 flex flex-col items-center gap-3">
         <button @click="toggleRadarLayer"
           :class="isRadarActive ? 'bg-purple-600 border-purple-400' : 'bg-slate-900/90 border-slate-700'"
           class="backdrop-blur-md text-white w-12 h-12 rounded-full border shadow-xl hover:bg-purple-700 transition-all flex items-center justify-center relative group"
@@ -488,7 +487,7 @@ onUnmounted(() => { if (mapInstance) { mapInstance.remove(); mapInstance = null 
         </button>
         
         <div title="Norte Verdadeiro"
-          class="bg-slate-900/90 backdrop-blur-md border border-slate-700 w-20 h-20 rounded-full flex items-center justify-center shadow-2xl transition-all relative overflow-hidden ring-2 ring-slate-900/50 shrink-0">
+          class="bg-slate-900/90 backdrop-blur-md border border-slate-700 w-14 h-14 rounded-full flex items-center justify-center shadow-2xl transition-all relative overflow-hidden ring-2 ring-slate-900/50 shrink-0">
 
           <svg viewBox="0 0 120 120" class="absolute inset-0 w-full h-full p-1.5">
             <defs>
